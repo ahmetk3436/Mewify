@@ -1,0 +1,130 @@
+{
+  "tasks": [
+    {
+      "id": "task_001",
+      "title": "Backend - FaceAnalysis Model \u0026 CRUD",
+      "description": "Create the FaceAnalysis model and CRUD endpoints for storing face analysis results.\n\nModel fields:\n- ID (uuid, primary key)\n- UserID (uuid, foreign key to users)\n- ImageURL (string) - stored selfie path\n- OverallScore (float) - 1-10 attractiveness rating\n- SymmetryScore (float) - facial symmetry 1-10\n- JawlineScore (float) - jawline definition 1-10\n- SkinScore (float) - skin health 1-10\n- EyeScore (float) - eye area rating 1-10\n- NoseScore (float) - nose proportion 1-10\n- LipsScore (float) - lips rating 1-10\n- HarmonyScore (float) - facial harmony 1-10\n- Strengths ([]string) - top 3 best features as JSON\n- Improvements ([]string) - suggested improvements as JSON\n- AnalyzedAt (timestamp)\n- CreatedAt, UpdatedAt, DeletedAt (soft delete)\n\nCreate:\n- backend/internal/models/face_analysis.go\n- backend/internal/services/face_analysis_service.go\n- backend/internal/handlers/face_analysis.go\n- backend/internal/dto/face_analysis.go\n\nEndpoints:\n- POST /api/analyses - create new analysis (accepts image_url, scores can be mock for now)\n- GET /api/analyses - list user's analyses (paginated)\n- GET /api/analyses/:id - get single analysis\n- DELETE /api/analyses/:id - soft delete\n- GET /api/analyses/latest - get user's most recent analysis\n- GET /api/analyses/stats - average scores over time\n\nRegister routes in backend/internal/routes/routes.go\nAdd AutoMigrate in backend/internal/database/database.go",
+      "status": "completed",
+      "priority": 10,
+      "depends_on": [],
+      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/backend \u0026\u0026 go build ./...",
+      "created_at": "2026-02-05T19:00:00Z",
+      "updated_at": "2026-02-05T16:34:04Z"
+    },
+    {
+      "id": "task_002",
+      "title": "Backend - MewingProgress Model \u0026 Tracking",
+      "description": "Create the MewingProgress model for daily mewing habit tracking.\n\nModel fields:\n- ID (uuid, primary key)\n- UserID (uuid, foreign key)\n- Date (date) - tracking date\n- MewingMinutes (int) - minutes spent mewing today\n- Completed (bool) - daily goal met\n- Notes (string) - optional user notes\n- JawlinePhotoURL (string) - optional daily progress photo\n- CreatedAt, UpdatedAt, DeletedAt\n\nAlso create MewingGoal model:\n- ID (uuid)\n- UserID (uuid)\n- DailyMinutesGoal (int) - target minutes per day (default 60)\n- ReminderEnabled (bool)\n- ReminderTime (string) - HH:MM format\n- CurrentStreak (int) - consecutive days completed\n- LongestStreak (int)\n- CreatedAt, UpdatedAt\n\nCreate:\n- backend/internal/models/mewing_progress.go (both models)\n- backend/internal/services/mewing_service.go\n- backend/internal/handlers/mewing.go\n- backend/internal/dto/mewing.go\n\nEndpoints:\n- POST /api/mewing/log - log today's mewing session\n- GET /api/mewing/today - get today's progress\n- GET /api/mewing/history - get history (last 30 days)\n- GET /api/mewing/streaks - get streak info\n- PUT /api/mewing/goal - update daily goal settings\n- GET /api/mewing/goal - get current goal settings\n\nRegister routes and add AutoMigrate.",
+      "status": "completed",
+      "priority": 9,
+      "depends_on": [
+        "task_001"
+      ],
+      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/backend \u0026\u0026 go build ./...",
+      "created_at": "2026-02-05T19:00:00Z",
+      "updated_at": "2026-02-05T20:02:00Z"
+    },
+    {
+      "id": "task_003",
+      "title": "Backend - GlowPlan Recommendations",
+      "description": "Create the GlowPlan model for personalized improvement recommendations.\n\nModel fields:\n- ID (uuid, primary key)\n- UserID (uuid, foreign key)\n- AnalysisID (uuid, foreign key to face_analyses) - based on which analysis\n- Category (string) - 'jawline', 'skin', 'style', 'fitness', 'grooming'\n- Title (string) - recommendation title\n- Description (text) - detailed recommendation\n- Priority (int) - 1-5, higher = more impactful\n- Difficulty (string) - 'easy', 'medium', 'hard'\n- TimeframeWeeks (int) - expected time to see results\n- IsCompleted (bool)\n- CompletedAt (timestamp)\n- CreatedAt, UpdatedAt, DeletedAt\n\nCreate:\n- backend/internal/models/glow_plan.go\n- backend/internal/services/glow_plan_service.go\n- backend/internal/handlers/glow_plan.go\n- backend/internal/dto/glow_plan.go\n\nEndpoints:\n- GET /api/glow-plan - get user's current recommendations\n- POST /api/glow-plan/generate - generate new plan based on latest analysis (mock AI for now)\n- PUT /api/glow-plan/:id/complete - mark recommendation as completed\n- GET /api/glow-plan/progress - completed vs total count\n\nThe generate endpoint should create 5-8 mock recommendations based on the lowest scoring areas from the analysis.\n\nRegister routes and add AutoMigrate.",
+      "status": "completed",
+      "priority": 8,
+      "depends_on": [
+        "task_001"
+      ],
+      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/backend \u0026\u0026 go build ./...",
+      "created_at": "2026-02-05T19:00:00Z",
+      "updated_at": "2026-02-05T20:15:00Z"
+    },
+    {
+      "id": "task_004",
+      "title": "Mobile - Home Dashboard \u0026 Face Scanner",
+      "description": "Create the main home screen with face scanning capability.\n\nFeatures:\n- Big 'Scan Your Face' CTA button with camera icon\n- Latest score display (if user has previous analysis) with animated ring showing 1-10 score\n- Quick stats: current streak, total scans, average score trend\n- Today's mewing progress mini-card\n- 'Your Glow Plan' preview (top 2 pending recommendations)\n\nWhen 'Scan Your Face' tapped:\n- Open camera using expo-image-picker\n- User takes selfie (front camera, face detection guide overlay would be ideal but optional)\n- Show loading state while 'analyzing' (mock 2-3 second delay)\n- Navigate to results screen\n\nCreate/update:\n- mobile/app/(protected)/(tabs)/index.tsx - main home dashboard\n- mobile/components/home/ScoreRing.tsx - animated circular score display\n- mobile/components/home/MewingMiniCard.tsx - today's mewing progress\n- mobile/components/home/GlowPlanPreview.tsx - top recommendations\n\nUse NativeWind for styling. Dark theme friendly.\nCall hapticSuccess() after successful scan.\nUse api client from mobile/lib/api.ts.\n\nIMPORTANT:\n- Use relative imports (../../../lib/haptics) NOT @/ path aliases\n- Do NOT import packages not in package.json\n- Follow existing NativeWind className patterns",
+      "status": "completed",
+      "priority": 10,
+      "depends_on": [
+        "task_001"
+      ],
+      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
+      "created_at": "2026-02-05T19:00:00Z",
+      "updated_at": "2026-02-05T16:47:55Z"
+    },
+    {
+      "id": "task_005",
+      "title": "Mobile - Face Analysis Results Screen",
+      "description": "Create the detailed face analysis results screen shown after scanning.\n\nFeatures:\n- Hero section: selfie photo with overall score overlay (big number 1-10)\n- Score breakdown grid:\n  - Symmetry score with icon\n  - Jawline score with icon\n  - Skin score with icon\n  - Eyes score with icon\n  - Nose score with icon\n  - Lips score with icon\n  - Harmony score with icon\n- 'Your Strengths' section (green cards with top 3 features)\n- 'Room to Grow' section (amber cards with improvement areas)\n- 'Share Results' button (for TikTok/Instagram - just copy to clipboard for now)\n- 'View Your Glow Plan' CTA button at bottom\n- 'Scan Again' secondary button\n\nCreate:\n- mobile/app/(protected)/analysis/[id].tsx - results screen with analysis ID param\n- mobile/components/analysis/ScoreGrid.tsx - 7 score breakdown cards\n- mobile/components/analysis/StrengthsCard.tsx - green positive features\n- mobile/components/analysis/ImprovementsCard.tsx - amber improvement areas\n- mobile/components/analysis/ShareButton.tsx - share functionality\n\nUse expo-sharing or clipboard for share.\nCall hapticSuccess() on share.\nAnimate scores appearing (simple fade-in is fine).\n\nIMPORTANT:\n- Use relative imports (../../../lib/haptics) NOT @/ path aliases\n- Do NOT import packages not in package.json",
+      "status": "completed",
+      "priority": 9,
+      "depends_on": [
+        "task_004"
+      ],
+      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
+      "created_at": "2026-02-05T19:00:00Z",
+      "updated_at": "2026-02-05T17:00:18Z"
+    },
+    {
+      "id": "task_006",
+      "title": "Mobile - Mewing Guide \u0026 Tracker Tab",
+      "description": "Create the mewing guide and daily tracker tab screen.\n\nFeatures:\n- Tab icon: face-profile or smile icon\n- Top section: Today's Progress\n  - Circular progress ring showing minutes completed vs goal\n  - 'Log Mewing Session' button\n  - Current streak flame icon with days count\n- Mewing Guide section (expandable accordion):\n  - 'What is Mewing?' - explanation text\n  - 'Correct Tongue Position' - step by step guide\n  - 'Common Mistakes' - what to avoid\n  - 'Expected Results' - realistic timeline\n- Weekly calendar view showing completed days (checkmarks)\n- 'Set Daily Reminder' toggle with time picker\n\nWhen 'Log Session' tapped:\n- Modal with minute input (slider or number input)\n- Optional notes field\n- Optional photo upload for progress tracking\n- Save button\n\nCreate:\n- mobile/app/(protected)/(tabs)/mewing.tsx - main mewing tab\n- mobile/components/mewing/ProgressRing.tsx - circular progress\n- mobile/components/mewing/StreakDisplay.tsx - flame icon + count\n- mobile/components/mewing/GuideAccordion.tsx - expandable guide sections\n- mobile/components/mewing/WeeklyCalendar.tsx - 7 day view\n- mobile/components/mewing/LogSessionModal.tsx - logging modal\n\nUpdate tab bar in mobile/app/(protected)/(tabs)/_layout.tsx to include mewing tab.\n\nIMPORTANT:\n- Use relative imports NOT @/ path aliases\n- Do NOT import packages not in package.json",
+      "status": "completed",
+      "priority": 8,
+      "depends_on": [
+        "task_002",
+        "task_004"
+      ],
+      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
+      "created_at": "2026-02-05T19:00:00Z",
+      "updated_at": "2026-02-05T20:35:00Z"
+    },
+    {
+      "id": "task_007",
+      "title": "Mobile - Progress Gallery \u0026 History",
+      "description": "Create the progress gallery tab for before/after comparisons.\n\nFeatures:\n- Tab icon: images/gallery icon\n- Score trend chart at top (line chart showing score over time)\n- Photo grid of all analysis selfies with dates and scores\n- Tap photo to view full analysis\n- 'Compare' mode:\n  - Select two photos\n  - Side by side comparison view\n  - Score differences highlighted\n- Filter by date range\n- Empty state for new users: 'Take your first scan to start tracking progress'\n\nCreate:\n- mobile/app/(protected)/(tabs)/progress.tsx - main progress tab\n- mobile/components/progress/ScoreTrendChart.tsx - simple line chart (use View-based, no external chart lib)\n- mobile/components/progress/PhotoGrid.tsx - analysis photo grid\n- mobile/components/progress/CompareModal.tsx - side-by-side comparison\n\nUpdate tab bar to include progress tab.\n\nIMPORTANT:\n- Use relative imports NOT @/ path aliases\n- Do NOT import external chart libraries - create simple View-based chart\n- Do NOT import packages not in package.json",
+      "status": "completed",
+      "priority": 7,
+      "depends_on": [
+        "task_004",
+        "task_005"
+      ],
+      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
+      "created_at": "2026-02-05T19:00:00Z",
+      "updated_at": "2026-02-05T20:35:00Z"
+    },
+    {
+      "id": "task_008",
+      "title": "Mobile - Glow Plan Screen",
+      "description": "Create the personalized glow plan recommendations screen.\n\nFeatures:\n- Header with progress: 'X of Y completed'\n- Filter chips: All, Jawline, Skin, Style, Fitness, Grooming\n- Recommendation cards showing:\n  - Category icon\n  - Title\n  - Difficulty badge (easy/medium/hard)\n  - Timeframe ('See results in X weeks')\n  - Priority indicator\n  - Checkbox to mark complete\n- When tapped, expand to show full description\n- 'Regenerate Plan' button (calls generate endpoint)\n- Confetti animation when all completed (optional, simple celebration)\n\nCreate:\n- mobile/app/(protected)/glow-plan.tsx - glow plan screen (not a tab, linked from home)\n- mobile/components/glow-plan/RecommendationCard.tsx - expandable rec card\n- mobile/components/glow-plan/CategoryFilter.tsx - filter chips\n- mobile/components/glow-plan/ProgressHeader.tsx - completion progress\n\nCall hapticSuccess() when marking complete.\n\nIMPORTANT:\n- Use relative imports NOT @/ path aliases\n- Do NOT import packages not in package.json",
+      "status": "completed",
+      "priority": 7,
+      "depends_on": [
+        "task_003",
+        "task_004"
+      ],
+      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
+      "created_at": "2026-02-05T19:00:00Z",
+      "updated_at": "2026-02-05T20:35:00Z"
+    },
+    {
+      "id": "task_009",
+      "title": "Deploy - Git Push \u0026 Coolify",
+      "description": "DEPLOYMENT TASK - Run AFTER all other tasks complete.\n\nThis task uses the Git-Claw deploy module to:\n1. Initialize git repository if needed\n2. Create private GitHub repo (Mewify)\n3. Commit all changes with message: 'Mewify v1.0 - AI Face Rating \u0026 Mewing Coach'\n4. Push to GitHub\n5. Deploy backend to Coolify\n\nNo code changes needed - just trigger deployment.\n\nRequired environment variables:\n- GITHUB_PAT: GitHub personal access token\n- GITHUB_OWNER: GitHub username (ahmetcoskunkizilkaya or ahmetk3436)\n- COOLIFY_TOKEN: Coolify API token\n- COOLIFY_URL: http://89.47.113.196:8000\n- COOLIFY_SERVER: lgs0s8kkggk0c88ogws0wk44\n- COOLIFY_PROJECT: hwcw4gw0scs40888okkcs8ws\n\nTest: Verify git status shows clean working directory after push.",
+      "status": "pending",
+      "priority": 1,
+      "depends_on": [
+        "task_001",
+        "task_002",
+        "task_003",
+        "task_004",
+        "task_005",
+        "task_006",
+        "task_007",
+        "task_008"
+      ],
+      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify \u0026\u0026 git status",
+      "is_deployment": true,
+      "created_at": "2026-02-05T19:00:00Z",
+      "updated_at": "2026-02-05T19:00:00Z"
+    }
+  ]
+}
