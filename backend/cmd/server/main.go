@@ -40,6 +40,7 @@ func main() {
 	faceAnalysisService := services.NewFaceAnalysisService(database.DB)
 	mewingService := services.NewMewingService(database.DB)
 	glowPlanService := services.NewGlowPlanService(database.DB)
+	aiAnalysisService := services.NewAiAnalysisService(database.DB, cfg)
 
 	// Handlers
 	authHandler := handlers.NewAuthHandler(authService)
@@ -49,6 +50,7 @@ func main() {
 	faceAnalysisHandler := handlers.NewFaceAnalysisHandler(faceAnalysisService)
 	mewingHandler := handlers.NewMewingHandler(mewingService)
 	glowPlanHandler := handlers.NewGlowPlanHandler(glowPlanService)
+	aiAnalysisHandler := handlers.NewAiAnalysisHandler(aiAnalysisService)
 
 	// Fiber app
 	app := fiber.New(fiber.Config{
@@ -73,7 +75,7 @@ func main() {
 	app.Use("/api/auth", authLimiter)
 
 	// Routes
-	routes.Setup(app, cfg, authHandler, healthHandler, webhookHandler, moderationHandler, faceAnalysisHandler, mewingHandler, glowPlanHandler)
+	routes.Setup(app, cfg, authHandler, healthHandler, webhookHandler, moderationHandler, faceAnalysisHandler, mewingHandler, glowPlanHandler, aiAnalysisHandler)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)

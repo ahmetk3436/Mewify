@@ -17,6 +17,7 @@ func Setup(
 	faceAnalysisHandler *handlers.FaceAnalysisHandler,
 	mewingHandler *handlers.MewingHandler,
 	glowPlanHandler *handlers.GlowPlanHandler,
+	aiAnalysisHandler *handlers.AiAnalysisHandler,
 ) {
 	api := app.Group("/api")
 
@@ -47,6 +48,9 @@ func Setup(
 	protected.Get("/analyses/stats", faceAnalysisHandler.GetStats)
 	protected.Get("/analyses/:id", faceAnalysisHandler.GetByID)
 	protected.Delete("/analyses/:id", faceAnalysisHandler.Delete)
+
+	// AI Face Analysis (protected)
+	protected.Post("/analyses/ai", aiAnalysisHandler.AnalyzeFace)
 
 	// Mewing Progress (protected)
 	mewing := protected.Group("/mewing")

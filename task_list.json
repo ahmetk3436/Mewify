@@ -1,130 +1,194 @@
 {
   "tasks": [
     {
-      "id": "task_001",
-      "title": "Backend - FaceAnalysis Model \u0026 CRUD",
-      "description": "Create the FaceAnalysis model and CRUD endpoints for storing face analysis results.\n\nModel fields:\n- ID (uuid, primary key)\n- UserID (uuid, foreign key to users)\n- ImageURL (string) - stored selfie path\n- OverallScore (float) - 1-10 attractiveness rating\n- SymmetryScore (float) - facial symmetry 1-10\n- JawlineScore (float) - jawline definition 1-10\n- SkinScore (float) - skin health 1-10\n- EyeScore (float) - eye area rating 1-10\n- NoseScore (float) - nose proportion 1-10\n- LipsScore (float) - lips rating 1-10\n- HarmonyScore (float) - facial harmony 1-10\n- Strengths ([]string) - top 3 best features as JSON\n- Improvements ([]string) - suggested improvements as JSON\n- AnalyzedAt (timestamp)\n- CreatedAt, UpdatedAt, DeletedAt (soft delete)\n\nCreate:\n- backend/internal/models/face_analysis.go\n- backend/internal/services/face_analysis_service.go\n- backend/internal/handlers/face_analysis.go\n- backend/internal/dto/face_analysis.go\n\nEndpoints:\n- POST /api/analyses - create new analysis (accepts image_url, scores can be mock for now)\n- GET /api/analyses - list user's analyses (paginated)\n- GET /api/analyses/:id - get single analysis\n- DELETE /api/analyses/:id - soft delete\n- GET /api/analyses/latest - get user's most recent analysis\n- GET /api/analyses/stats - average scores over time\n\nRegister routes in backend/internal/routes/routes.go\nAdd AutoMigrate in backend/internal/database/database.go",
-      "status": "completed",
+      "id": "enhance_001",
+      "title": "Backend: AI Face Analysis with OpenAI Vision API",
+      "description": "Create a new AI analysis service and endpoint that accepts a base64 image and returns real AI-scored face analysis using OpenAI GPT-4o-mini (free tier) or GPT-4o (premium tier).\n\nFiles to modify:\n- backend/internal/config/config.go: Add OpenAIAPIKey string field, load from OPENAI_API_KEY env var. Add OpenAIModel string field defaulting to 'gpt-4o-mini'.\n- backend/internal/services/ai_analysis_service.go (NEW): Create AiAnalysisService struct with db *gorm.DB and cfg *config.Config fields. Method AnalyzeImage(userID uuid.UUID, imageBase64 string) (*models.FaceAnalysis, error) that: (1) Builds OpenAI API request to POST https://api.openai.com/v1/chat/completions with model from config, (2) System prompt instructs GPT to analyze the face photo and return JSON with fields: overall_score(1-10 float), symmetry_score, jawline_score, skin_score, eye_score, nose_score, lips_score, harmony_score, strengths([]string, 3 items), improvements([]string, 3 items), (3) User message contains image_url with data:image/jpeg;base64,{imageBase64} content type, (4) Parses the JSON response via json.Unmarshal into a struct, (5) Creates FaceAnalysis model record in database with all scores and returns it. Use net/http for the API call with 30s timeout. Add OPENAI_API_KEY to config.go Load() function.\n- backend/internal/handlers/ai_analysis_handler.go (NEW): Create AiAnalysisHandler with the service. Single endpoint AnalyzeFace(c *fiber.Ctx) that parses {\"image_base64\": \"...\"} body, extracts userID from JWT locals, calls service.AnalyzeImage(), returns the full FaceAnalysisResponse DTO.\n- backend/internal/routes/routes.go: Add protected.Post(\"/analyses/ai\", aiAnalysisHandler.AnalyzeFace) route. Import and wire the new handler in Setup() params.\n- backend/cmd/server/main.go: Create aiAnalysisService := services.NewAiAnalysisService(database.DB, cfg), create aiAnalysisHandler, pass to routes.Setup().\n\nThe OpenAI request body structure: {\"model\": cfg.OpenAIModel, \"messages\": [{\"role\": \"system\", \"content\": \"You are a facial aesthetics AI...Return ONLY valid JSON...\"}, {\"role\": \"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"data:image/jpeg;base64,...\"}}]}], \"max_tokens\": 1000}. Parse response.choices[0].message.content as JSON into the scores struct.",
+      "status": "in_progress",
       "priority": 10,
       "depends_on": [],
-      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/backend \u0026\u0026 go build ./...",
-      "created_at": "2026-02-05T19:00:00Z",
-      "updated_at": "2026-02-05T16:34:04Z"
+      "test_command": "cd backend \u0026\u0026 go build ./...",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": "2026-02-06T22:23:40Z"
     },
     {
-      "id": "task_002",
-      "title": "Backend - MewingProgress Model \u0026 Tracking",
-      "description": "Create the MewingProgress model for daily mewing habit tracking.\n\nModel fields:\n- ID (uuid, primary key)\n- UserID (uuid, foreign key)\n- Date (date) - tracking date\n- MewingMinutes (int) - minutes spent mewing today\n- Completed (bool) - daily goal met\n- Notes (string) - optional user notes\n- JawlinePhotoURL (string) - optional daily progress photo\n- CreatedAt, UpdatedAt, DeletedAt\n\nAlso create MewingGoal model:\n- ID (uuid)\n- UserID (uuid)\n- DailyMinutesGoal (int) - target minutes per day (default 60)\n- ReminderEnabled (bool)\n- ReminderTime (string) - HH:MM format\n- CurrentStreak (int) - consecutive days completed\n- LongestStreak (int)\n- CreatedAt, UpdatedAt\n\nCreate:\n- backend/internal/models/mewing_progress.go (both models)\n- backend/internal/services/mewing_service.go\n- backend/internal/handlers/mewing.go\n- backend/internal/dto/mewing.go\n\nEndpoints:\n- POST /api/mewing/log - log today's mewing session\n- GET /api/mewing/today - get today's progress\n- GET /api/mewing/history - get history (last 30 days)\n- GET /api/mewing/streaks - get streak info\n- PUT /api/mewing/goal - update daily goal settings\n- GET /api/mewing/goal - get current goal settings\n\nRegister routes and add AutoMigrate.",
-      "status": "completed",
-      "priority": 9,
-      "depends_on": [
-        "task_001"
-      ],
-      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/backend \u0026\u0026 go build ./...",
-      "created_at": "2026-02-05T19:00:00Z",
-      "updated_at": "2026-02-05T20:02:00Z"
+      "id": "enhance_002",
+      "title": "Backend: Fix Auth Stubs (Refresh Token + Logout + Apple JWT)",
+      "description": "Fix three critical auth stubs that currently return placeholder responses.\n\nFiles to modify:\n\n1. backend/internal/handlers/auth_handler.go - Refresh method (lines 59-62): Replace stub with real implementation. Parse RefreshTokenRequest body, call h.service.RefreshToken(req.RefreshToken), return new access token. Logout method (lines 89-92): Parse {\"refresh_token\": \"...\"} body, call h.service.Logout(refreshToken) to revoke the token in DB.\n\n2. backend/internal/services/auth_service.go:\n- Add RefreshToken(refreshTokenStr string) (string, error) method: (a) Hash the incoming refresh token with SHA-256, (b) Query RefreshToken model where token_hash = hashed AND revoked = false AND expires_at \u003e now, (c) If not found return error, (d) Generate new access JWT via generateJWT(token.UserID), (e) Return new access token string.\n- Add Logout(refreshTokenStr string) error method: (a) Hash the token, (b) Update RefreshToken set revoked = true where token_hash = hashed.\n- Fix Register and Login to also generate refresh tokens: After generating access JWT, create a random 64-byte token via crypto/rand, SHA-256 hash it, store hash in RefreshToken model with user_id, expires_at = now + cfg.JWTRefreshExpiry. Return both access_token and raw refresh_token string to client.\n- Fix AppleSignIn (line 93): Replace hardcoded email 'apple_user@example.com' with real Apple JWT parsing. Decode the identityToken as JWT (it's a standard JWT from Apple), extract the 'email' claim from payload without full signature verification (Apple tokens are verified client-side by the SDK). Use base64 URL decode on the payload segment: parts := strings.Split(identityToken, \".\"), decode parts[1], unmarshal to get email and sub claims.\n\n3. backend/internal/handlers/auth_handler.go - Update Register and Login responses to include both \"token\" and \"refresh_token\" fields.\n\nAdd import \"crypto/rand\", \"crypto/sha256\", \"encoding/hex\", \"encoding/base64\", \"strings\" to auth_service.go as needed.",
+      "status": "pending",
+      "priority": 10,
+      "depends_on": [],
+      "test_command": "cd backend \u0026\u0026 go build ./...",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
     },
     {
-      "id": "task_003",
-      "title": "Backend - GlowPlan Recommendations",
-      "description": "Create the GlowPlan model for personalized improvement recommendations.\n\nModel fields:\n- ID (uuid, primary key)\n- UserID (uuid, foreign key)\n- AnalysisID (uuid, foreign key to face_analyses) - based on which analysis\n- Category (string) - 'jawline', 'skin', 'style', 'fitness', 'grooming'\n- Title (string) - recommendation title\n- Description (text) - detailed recommendation\n- Priority (int) - 1-5, higher = more impactful\n- Difficulty (string) - 'easy', 'medium', 'hard'\n- TimeframeWeeks (int) - expected time to see results\n- IsCompleted (bool)\n- CompletedAt (timestamp)\n- CreatedAt, UpdatedAt, DeletedAt\n\nCreate:\n- backend/internal/models/glow_plan.go\n- backend/internal/services/glow_plan_service.go\n- backend/internal/handlers/glow_plan.go\n- backend/internal/dto/glow_plan.go\n\nEndpoints:\n- GET /api/glow-plan - get user's current recommendations\n- POST /api/glow-plan/generate - generate new plan based on latest analysis (mock AI for now)\n- PUT /api/glow-plan/:id/complete - mark recommendation as completed\n- GET /api/glow-plan/progress - completed vs total count\n\nThe generate endpoint should create 5-8 mock recommendations based on the lowest scoring areas from the analysis.\n\nRegister routes and add AutoMigrate.",
-      "status": "completed",
-      "priority": 8,
-      "depends_on": [
-        "task_001"
-      ],
-      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/backend \u0026\u0026 go build ./...",
-      "created_at": "2026-02-05T19:00:00Z",
-      "updated_at": "2026-02-05T20:15:00Z"
-    },
-    {
-      "id": "task_004",
-      "title": "Mobile - Home Dashboard \u0026 Face Scanner",
-      "description": "Create the main home screen with face scanning capability.\n\nFeatures:\n- Big 'Scan Your Face' CTA button with camera icon\n- Latest score display (if user has previous analysis) with animated ring showing 1-10 score\n- Quick stats: current streak, total scans, average score trend\n- Today's mewing progress mini-card\n- 'Your Glow Plan' preview (top 2 pending recommendations)\n\nWhen 'Scan Your Face' tapped:\n- Open camera using expo-image-picker\n- User takes selfie (front camera, face detection guide overlay would be ideal but optional)\n- Show loading state while 'analyzing' (mock 2-3 second delay)\n- Navigate to results screen\n\nCreate/update:\n- mobile/app/(protected)/(tabs)/index.tsx - main home dashboard\n- mobile/components/home/ScoreRing.tsx - animated circular score display\n- mobile/components/home/MewingMiniCard.tsx - today's mewing progress\n- mobile/components/home/GlowPlanPreview.tsx - top recommendations\n\nUse NativeWind for styling. Dark theme friendly.\nCall hapticSuccess() after successful scan.\nUse api client from mobile/lib/api.ts.\n\nIMPORTANT:\n- Use relative imports (../../../lib/haptics) NOT @/ path aliases\n- Do NOT import packages not in package.json\n- Follow existing NativeWind className patterns",
-      "status": "completed",
+      "id": "enhance_003",
+      "title": "Backend: AI-Powered Glow Plan Generation",
+      "description": "Replace the mock recommendation generator in glow_plan_service.go with real AI-powered recommendations using OpenAI GPT-4o-mini.\n\nFiles to modify:\n\n1. backend/internal/services/glow_plan_service.go:\n- Add cfg *config.Config to GlowPlanService struct. Update NewGlowPlanService to accept cfg parameter.\n- Replace generateMockRecommendations() (lines 98-150) with generateAIRecommendations(userID, analysisID uuid.UUID, analysis *models.FaceAnalysis) ([]models.GlowPlan, error). This method: (a) Builds a prompt containing the user's scores: 'User face analysis scores: overall={OverallScore}, symmetry={SymmetryScore}, jawline={JawlineScore}, skin={SkinScore}, eye={EyeScore}, nose={NoseScore}, lips={LipsScore}, harmony={HarmonyScore}. Strengths: {Strengths}. Improvements: {Improvements}. Generate 5-7 personalized improvement recommendations as JSON array with fields: category(jawline|skin|style|fitness|grooming), title(short actionable title), description(2-3 sentence detailed advice), difficulty(easy|medium|hard), timeframe_weeks(1-12), priority(1-5, 5=highest). Focus recommendations on lowest-scoring areas.', (b) Calls OpenAI API via POST https://api.openai.com/v1/chat/completions with cfg.OpenAIAPIKey, (c) Parses JSON array response, (d) Creates GlowPlan model for each recommendation.\n- Delete getMockTitle, getMockDescription, getRandomDifficulty helper methods (lines 152-204).\n- Update GenerateGlowPlan to call generateAIRecommendations instead of generateMockRecommendations.\n\n2. backend/cmd/server/main.go: Update NewGlowPlanService call to pass cfg.\n\nKeep the existing database save logic (delete old plans, create new ones in loop). The AI prompt should explicitly request JSON-only output with no markdown formatting.",
+      "status": "pending",
       "priority": 10,
       "depends_on": [
-        "task_001"
+        "enhance_001"
       ],
-      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
-      "created_at": "2026-02-05T19:00:00Z",
-      "updated_at": "2026-02-05T16:47:55Z"
+      "test_command": "cd backend \u0026\u0026 go build ./...",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
     },
     {
-      "id": "task_005",
-      "title": "Mobile - Face Analysis Results Screen",
-      "description": "Create the detailed face analysis results screen shown after scanning.\n\nFeatures:\n- Hero section: selfie photo with overall score overlay (big number 1-10)\n- Score breakdown grid:\n  - Symmetry score with icon\n  - Jawline score with icon\n  - Skin score with icon\n  - Eyes score with icon\n  - Nose score with icon\n  - Lips score with icon\n  - Harmony score with icon\n- 'Your Strengths' section (green cards with top 3 features)\n- 'Room to Grow' section (amber cards with improvement areas)\n- 'Share Results' button (for TikTok/Instagram - just copy to clipboard for now)\n- 'View Your Glow Plan' CTA button at bottom\n- 'Scan Again' secondary button\n\nCreate:\n- mobile/app/(protected)/analysis/[id].tsx - results screen with analysis ID param\n- mobile/components/analysis/ScoreGrid.tsx - 7 score breakdown cards\n- mobile/components/analysis/StrengthsCard.tsx - green positive features\n- mobile/components/analysis/ImprovementsCard.tsx - amber improvement areas\n- mobile/components/analysis/ShareButton.tsx - share functionality\n\nUse expo-sharing or clipboard for share.\nCall hapticSuccess() on share.\nAnimate scores appearing (simple fade-in is fine).\n\nIMPORTANT:\n- Use relative imports (../../../lib/haptics) NOT @/ path aliases\n- Do NOT import packages not in package.json",
-      "status": "completed",
-      "priority": 9,
-      "depends_on": [
-        "task_004"
-      ],
-      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
-      "created_at": "2026-02-05T19:00:00Z",
-      "updated_at": "2026-02-05T17:00:18Z"
+      "id": "enhance_004",
+      "title": "Mobile: 3-Screen Onboarding + Guest Mode + Smart Routing",
+      "description": "Create a 3-screen onboarding flow with guest mode support and smart routing logic.\n\nFiles to create/modify:\n\n1. mobile/app/onboarding.tsx (NEW): Create OnboardingScreen with 3 pages using horizontal ScrollView with pagingEnabled and Dimensions.get('window').width per page. State: currentPage (number). Page 1: Large sparkles icon (Ionicons), title 'Welcome to Mewify' (text-3xl font-bold text-gray-900), subtitle 'AI-powered face analysis \u0026 mewing coach' (text-base text-gray-500), bg-white. Page 2: Large camera icon, title 'Scan \u0026 Analyze', subtitle 'Get instant AI feedback on your facial features with detailed scores', list 3 features with checkmark-circle icons in blue-600. Page 3: Large trophy icon, title 'Track Your Glow-Up', subtitle 'Daily mewing tracker, streaks, and personalized recommendations'. Two buttons: 'Try Free' (bg-blue-600 rounded-2xl py-4, calls handleTryFree) and 'Sign In' (text-blue-600 font-semibold, navigates to /(auth)/login). Dot indicators at bottom: 3 View circles (w-2 h-2 rounded-full), active=bg-blue-600, inactive=bg-gray-300. handleTryFree: sets AsyncStorage 'onboarding_complete' = 'true' and 'guest_mode' = 'true' and 'guest_uses' = '0', then router.replace('/(protected)/(tabs)').\n\n2. mobile/app/index.tsx: Replace current logic with smart routing chain: (a) Check AsyncStorage 'onboarding_complete', if not set → router.replace('/onboarding'), (b) Check if authenticated via useAuth → router.replace('/(protected)/(tabs)'), (c) Check AsyncStorage 'guest_mode' = 'true' → router.replace('/(protected)/(tabs)'), (d) Else → router.replace('/(auth)/login').\n\n3. mobile/app/(auth)/login.tsx: Add 'Skip for now' TouchableOpacity below the Sign In button. On press: set AsyncStorage 'guest_mode' = 'true' and 'guest_uses' = '0', router.replace('/(protected)/(tabs)'). Style: text-blue-600 font-medium text-base mt-4.\n\n4. mobile/app/(protected)/_layout.tsx: Modify auth guard to also allow guest mode by checking AsyncStorage 'guest_mode'. If neither authenticated nor guest → redirect to login.\n\nUse import AsyncStorage from '@react-native-async-storage/async-storage' — wait, this package is not in package.json. Use expo-secure-store's setItemAsync/getItemAsync instead for storing onboarding_complete, guest_mode, guest_uses keys.",
+      "status": "pending",
+      "priority": 8,
+      "depends_on": [],
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
     },
     {
-      "id": "task_006",
-      "title": "Mobile - Mewing Guide \u0026 Tracker Tab",
-      "description": "Create the mewing guide and daily tracker tab screen.\n\nFeatures:\n- Tab icon: face-profile or smile icon\n- Top section: Today's Progress\n  - Circular progress ring showing minutes completed vs goal\n  - 'Log Mewing Session' button\n  - Current streak flame icon with days count\n- Mewing Guide section (expandable accordion):\n  - 'What is Mewing?' - explanation text\n  - 'Correct Tongue Position' - step by step guide\n  - 'Common Mistakes' - what to avoid\n  - 'Expected Results' - realistic timeline\n- Weekly calendar view showing completed days (checkmarks)\n- 'Set Daily Reminder' toggle with time picker\n\nWhen 'Log Session' tapped:\n- Modal with minute input (slider or number input)\n- Optional notes field\n- Optional photo upload for progress tracking\n- Save button\n\nCreate:\n- mobile/app/(protected)/(tabs)/mewing.tsx - main mewing tab\n- mobile/components/mewing/ProgressRing.tsx - circular progress\n- mobile/components/mewing/StreakDisplay.tsx - flame icon + count\n- mobile/components/mewing/GuideAccordion.tsx - expandable guide sections\n- mobile/components/mewing/WeeklyCalendar.tsx - 7 day view\n- mobile/components/mewing/LogSessionModal.tsx - logging modal\n\nUpdate tab bar in mobile/app/(protected)/(tabs)/_layout.tsx to include mewing tab.\n\nIMPORTANT:\n- Use relative imports NOT @/ path aliases\n- Do NOT import packages not in package.json",
-      "status": "completed",
+      "id": "enhance_005",
+      "title": "Mobile: Real AI Face Scan Screen with Camera",
+      "description": "Create a proper face scan screen that captures a photo, sends base64 to the new AI analysis endpoint, and navigates to the analysis result screen.\n\nFiles to create/modify:\n\n1. mobile/app/(protected)/scan.tsx (NEW): Create ScanScreen component. States: isCapturing(bool), isAnalyzing(bool), analysisProgress(string). Flow: (a) On mount, immediately request camera permission via ImagePicker.requestCameraPermissionsAsync(). (b) If granted, auto-launch camera: ImagePicker.launchCameraAsync({ allowsEditing: true, aspect: [3, 4], quality: 0.7, cameraType: ImagePicker.CameraType.front, base64: true }). (c) If user cancels camera, show centered View with 'camera-outline' icon (size 64, gray-300), text 'No photo taken' (text-gray-500), and 'Try Again' button (bg-blue-600 rounded-xl py-3). (d) If photo captured, show the photo as Image (rounded-2xl, h-80, w-full) with analyzing overlay. Set isAnalyzing=true, show ActivityIndicator with text 'Analyzing your features...' then 'Almost there...' after 3s. (e) Call api.post('/analyses/ai', { image_base64: result.assets[0].base64 }). (f) On success: hapticSuccess(), router.replace(`/(protected)/analysis/${response.data.data.id}`). (g) On error: hapticError(), show Alert with retry option. (h) Guest mode check: read 'guest_uses' from expo-secure-store, if \u003e= 3, show paywall alert 'Free scans used! Sign up for unlimited access' with 'Sign Up' and 'Cancel' buttons.\n\nStyling: SafeAreaView bg-gray-50, analyzing state has white card (bg-white rounded-3xl mx-4 p-6 shadow-lg) containing the photo preview, a pulsing ActivityIndicator (color #2563eb), and status text.\n\n2. mobile/app/(protected)/(tabs)/index.tsx: Update handleScanFace to: router.push('/(protected)/scan') instead of opening camera directly. Remove the mock delay, mock navigation to /results, and all inline camera logic. Keep the camera permission request as a pre-check only.\n\n3. mobile/app/(protected)/_layout.tsx: Add scan to the hidden screens array (href: null) so it doesn't appear in tab bar.",
+      "status": "pending",
       "priority": 8,
       "depends_on": [
-        "task_002",
-        "task_004"
+        "enhance_001",
+        "enhance_004"
       ],
-      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
-      "created_at": "2026-02-05T19:00:00Z",
-      "updated_at": "2026-02-05T20:35:00Z"
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
     },
     {
-      "id": "task_007",
-      "title": "Mobile - Progress Gallery \u0026 History",
-      "description": "Create the progress gallery tab for before/after comparisons.\n\nFeatures:\n- Tab icon: images/gallery icon\n- Score trend chart at top (line chart showing score over time)\n- Photo grid of all analysis selfies with dates and scores\n- Tap photo to view full analysis\n- 'Compare' mode:\n  - Select two photos\n  - Side by side comparison view\n  - Score differences highlighted\n- Filter by date range\n- Empty state for new users: 'Take your first scan to start tracking progress'\n\nCreate:\n- mobile/app/(protected)/(tabs)/progress.tsx - main progress tab\n- mobile/components/progress/ScoreTrendChart.tsx - simple line chart (use View-based, no external chart lib)\n- mobile/components/progress/PhotoGrid.tsx - analysis photo grid\n- mobile/components/progress/CompareModal.tsx - side-by-side comparison\n\nUpdate tab bar to include progress tab.\n\nIMPORTANT:\n- Use relative imports NOT @/ path aliases\n- Do NOT import external chart libraries - create simple View-based chart\n- Do NOT import packages not in package.json",
-      "status": "completed",
+      "id": "enhance_006",
+      "title": "Mobile: Connect Analysis Detail Screen to Real API",
+      "description": "Replace all mock data in the analysis detail screen with real API data fetched from the backend.\n\nFiles to modify:\n\n1. mobile/app/(protected)/analysis/[id].tsx: Complete rewrite of data loading. Remove the entire mock data object (lines 36-67 with hardcoded overallScore: 8.4, Unsplash URL, static scores). Replace with real API call:\n- In useEffect, call api.get(`/analyses/${id}`) to fetch real analysis data.\n- Map response fields: data.data.overall_score → overallScore, data.data.symmetry_score → scores.symmetry, data.data.jawline_score → scores.jawline, data.data.skin_score → scores.skin, data.data.eye_score → scores.eyes, data.data.nose_score → scores.nose, data.data.lips_score → scores.lips, data.data.harmony_score → scores.harmony, data.data.strengths → strengths, data.data.improvements → improvements, data.data.image_url → imageUri.\n- Add error state (isError: boolean, errorMessage: string). On API error, show error screen with 'alert-circle-outline' icon (size 48, red-400), error message text, and 'Go Back' button.\n- Fix bottom buttons: 'View Your Glow Plan' → router.push('/(protected)/glow-plan') (was '/(protected)/plan' which doesn't exist). 'Scan Again' → router.push('/(protected)/scan') (now exists after enhance_005).\n- Add pull-to-refresh via RefreshControl on ScrollView with onRefresh callback that re-fetches the analysis.\n- Import RefreshControl from react-native.\n\n2. mobile/components/analysis/ShareButton.tsx: Update to use expo-sharing instead of just clipboard. Import * as Sharing from 'expo-sharing'. In handleShare: first try Sharing.isAvailableAsync(), if available use Sharing.shareAsync() with a message string, else fall back to clipboard copy. The share text format: 'I scored {score}/10 on Mewify! My top strengths: {strengths[0]}, {strengths[1]}. Try it yourself!'",
+      "status": "pending",
       "priority": 7,
       "depends_on": [
-        "task_004",
-        "task_005"
+        "enhance_005"
       ],
-      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
-      "created_at": "2026-02-05T19:00:00Z",
-      "updated_at": "2026-02-05T20:35:00Z"
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
     },
     {
-      "id": "task_008",
-      "title": "Mobile - Glow Plan Screen",
-      "description": "Create the personalized glow plan recommendations screen.\n\nFeatures:\n- Header with progress: 'X of Y completed'\n- Filter chips: All, Jawline, Skin, Style, Fitness, Grooming\n- Recommendation cards showing:\n  - Category icon\n  - Title\n  - Difficulty badge (easy/medium/hard)\n  - Timeframe ('See results in X weeks')\n  - Priority indicator\n  - Checkbox to mark complete\n- When tapped, expand to show full description\n- 'Regenerate Plan' button (calls generate endpoint)\n- Confetti animation when all completed (optional, simple celebration)\n\nCreate:\n- mobile/app/(protected)/glow-plan.tsx - glow plan screen (not a tab, linked from home)\n- mobile/components/glow-plan/RecommendationCard.tsx - expandable rec card\n- mobile/components/glow-plan/CategoryFilter.tsx - filter chips\n- mobile/components/glow-plan/ProgressHeader.tsx - completion progress\n\nCall hapticSuccess() when marking complete.\n\nIMPORTANT:\n- Use relative imports NOT @/ path aliases\n- Do NOT import packages not in package.json",
-      "status": "completed",
+      "id": "enhance_007",
+      "title": "Mobile: Connect Glow Plan Screen to Real Backend API",
+      "description": "Replace all mock data in glow-plan.tsx with real API calls to the backend glow plan endpoints.\n\nFiles to modify:\n\n1. mobile/app/(protected)/glow-plan.tsx: Remove the entire mockRecommendations array (lines 18-69). Replace with real API integration:\n- Add isLoading state (boolean, default true) and error state (string | null).\n- In useEffect on mount, call loadGlowPlan() which: (a) Calls api.get('/glow-plan') to fetch user's plans, (b) Maps response data to Recommendation[] format: r.id, r.category (capitalize first letter), r.title, r.description, r.difficulty, r.timeframe_weeks → timeframeWeeks, r.priority \u003e 3 → priority: true, r.is_completed → completed, (c) Sets recommendations state, (d) Also calls api.get('/glow-plan/progress') to get progress stats.\n- Update handleToggleComplete: Call api.put(`/glow-plan/${id}/complete`, { is_completed: completed }). On success update local state. On error show Alert and revert.\n- Update handleRegeneratePlan: In the onPress callback, (a) First get latest analysis via api.get('/analyses/latest'), (b) Then call api.post('/glow-plan/generate', { analysis_id: latestAnalysis.id }), (c) Reload the plan list via loadGlowPlan(). If no analysis exists, show Alert: 'No Analysis Found - Take a face scan first to generate your personalized glow plan.' with button to navigate to scan screen.\n- Add loading state: When isLoading, show centered ActivityIndicator (size large, color #2563eb) with text 'Loading your plan...'.\n- Add empty state: When recommendations.length === 0 and !isLoading, show centered view with 'sparkles-outline' icon (size 64, gray-300), text 'No glow plan yet' (text-lg text-gray-500), subtitle 'Take a face scan to get personalized recommendations', and 'Scan Now' button (bg-blue-600) navigating to scan.\n- Add RefreshControl for pull-to-refresh.",
+      "status": "pending",
       "priority": 7,
       "depends_on": [
-        "task_003",
-        "task_004"
+        "enhance_003",
+        "enhance_005"
       ],
-      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify/mobile \u0026\u0026 npx tsc --noEmit",
-      "created_at": "2026-02-05T19:00:00Z",
-      "updated_at": "2026-02-05T20:35:00Z"
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
     },
     {
-      "id": "task_009",
-      "title": "Deploy - Git Push \u0026 Coolify",
-      "description": "DEPLOYMENT TASK - Run AFTER all other tasks complete.\n\nThis task uses the Git-Claw deploy module to:\n1. Initialize git repository if needed\n2. Create private GitHub repo (Mewify)\n3. Commit all changes with message: 'Mewify v1.0 - AI Face Rating \u0026 Mewing Coach'\n4. Push to GitHub\n5. Deploy backend to Coolify\n\nNo code changes needed - just trigger deployment.\n\nRequired environment variables:\n- GITHUB_PAT: GitHub personal access token\n- GITHUB_OWNER: GitHub username (ahmetcoskunkizilkaya or ahmetk3436)\n- COOLIFY_TOKEN: Coolify API token\n- COOLIFY_URL: http://89.47.113.196:8000\n- COOLIFY_SERVER: lgs0s8kkggk0c88ogws0wk44\n- COOLIFY_PROJECT: hwcw4gw0scs40888okkcs8ws\n\nTest: Verify git status shows clean working directory after push.",
-      "status": "completed",
-      "priority": 1,
+      "id": "enhance_008",
+      "title": "Mobile: Home Screen with Real API Data + Dashboard Redesign",
+      "description": "Replace all mock data on the home screen with real API calls and fix the dashboard to show live data.\n\nFiles to modify:\n\n1. mobile/app/(protected)/(tabs)/index.tsx: Remove all mock data (lines 23-46: userData object and recommendations array). Replace with real API integration:\n- Add states: isLoading(bool), latestAnalysis(object|null), mewingData(object|null), recommendations(array), streakInfo(object|null).\n- Add loadDashboard() async function called in useEffect: (a) api.get('/analyses/latest') → set latestAnalysis with overall_score, (b) api.get('/mewing/today') → set mewingData with mewing_minutes, (c) api.get('/mewing/goal') → get daily_minutes_goal, (d) api.get('/mewing/streaks') → set streakInfo with current_streak, longest_streak, total_days_logged, (e) api.get('/glow-plan') → set recommendations (first 2 incomplete items), (f) api.get('/analyses/stats') → get total_analyses count and monthly_trend for avg score trend calculation. Wrap all in Promise.allSettled to handle partial failures gracefully.\n- Update ScoreRing: Pass latestAnalysis?.overall_score || 0 instead of hardcoded 7.5.\n- Update Quick Stats: streak = streakInfo?.current_streak || 0, totalScans = stats?.total_analyses || 0, trend = calculate from monthly_trend array (last month avg - previous month avg).\n- Update MewingMiniCard: minutesToday = mewingData?.mewing_minutes || 0, dailyGoal = goalData?.daily_minutes_goal || 60, streak = streakInfo?.current_streak || 0.\n- Update GlowPlanPreview: Pass real recommendations from API.\n- Add RefreshControl on ScrollView for pull-to-refresh calling loadDashboard().\n- Show skeleton loading state while isLoading: gray rounded View placeholders (bg-gray-200 rounded-xl h-32 animate-pulse) for each section.\n- Handle empty/first-time user: If no latestAnalysis, show welcome card with 'Take your first scan' CTA instead of ScoreRing.\n\n2. mobile/components/home/MewingMiniCard.tsx: Add onPress prop for 'Log Session' button that navigates to /(protected)/mewing. Currently the button does nothing.\n\n3. mobile/components/home/GlowPlanPreview.tsx: Add onViewAll prop that navigates to /(protected)/glow-plan. Currently 'View All' link does nothing.",
+      "status": "pending",
+      "priority": 8,
       "depends_on": [
-        "task_001",
-        "task_002",
-        "task_003",
-        "task_004",
-        "task_005",
-        "task_006",
-        "task_007",
-        "task_008"
+        "enhance_005"
       ],
-      "test_command": "cd /Users/ahmetcoskunkizilkaya/Desktop/Mewify \u0026\u0026 git status",
-      "is_deployment": true,
-      "created_at": "2026-02-05T19:00:00Z",
-      "updated_at": "2026-02-05T19:00:00Z"
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
+    },
+    {
+      "id": "enhance_009",
+      "title": "Mobile: Fix Mewing Screen Weekly Calendar with Real API Data",
+      "description": "The mewing screen's weekly calendar (weeklyData state) is hardcoded to all-false and never loads real data from the API. Fix this to show actual completion status for the current week.\n\nFiles to modify:\n\n1. mobile/app/(protected)/mewing.tsx:\n- In loadData() function, add a call to api.get('/mewing/history?days=7') after the existing API calls.\n- Parse the history response which returns array of { date, status, minutes } objects.\n- Map the 7-day history to the weeklyData boolean array: For each day of the current week (Monday to Sunday), check if there's a matching history entry with status === 'completed'. The API returns dates in YYYY-MM-DD format; compare against the current week's dates using: const today = new Date(); const dayOfWeek = today.getDay(); const monday = new Date(today); monday.setDate(today.getDate() - ((dayOfWeek + 6) % 7)); Then for each day i (0-6), create date = new Date(monday); date.setDate(monday.getDate() + i); format as YYYY-MM-DD and check against history.\n- Replace the static weeklyData initialization [false, false, false, false, false, false, false] with the computed array.\n- Add isLoading state to show ActivityIndicator while data loads.\n- Add pull-to-refresh with RefreshControl on the ScrollView.\n- After successful handleLogSession, call loadData() to refresh all data including the weekly calendar (this already happens but now weekly data will also update).\n- Add haptic feedback to the Log Session modal's Save button (hapticSuccess on success, hapticError on failure).",
+      "status": "pending",
+      "priority": 7,
+      "depends_on": [],
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
+    },
+    {
+      "id": "enhance_010",
+      "title": "Mobile: Loading/Error/Empty States for All Screens",
+      "description": "Add proper loading, error, and empty states to all screens that currently lack them.\n\nFiles to modify:\n\n1. mobile/app/(protected)/progress.tsx: Add isLoading state. While loading, show 3 skeleton placeholder cards (View bg-gray-200 rounded-xl h-40 mb-3 with opacity animation). Add error state with retry button. The current empty state is good but add haptic feedback on 'Take First Scan' button.\n\n2. mobile/app/(protected)/mewing.tsx: Add isLoading state (boolean, default true). While loading, show skeleton views: a rounded-2xl bg-gray-200 h-48 for the progress card, two h-20 side-by-side rounded-xl for streak cards, h-16 rounded-xl for weekly calendar. Set isLoading=false after loadData() completes. Add error state: if all API calls fail, show centered 'wifi-outline' icon (size 48, gray-400), 'Connection error' text, 'Retry' button (bg-blue-600 rounded-xl).\n\n3. mobile/app/(protected)/glow-plan.tsx: Already addressed in enhance_007.\n\n4. mobile/app/(protected)/settings.tsx: Add isLoading state for account deletion (already has isDeleting). Add privacy policy link: Pressable in the Account section with text 'Privacy Policy' (text-blue-600) that opens Linking.openURL('https://mewify.app/privacy'). Add app version display at bottom: Text 'Mewify v1.0.0' (text-xs text-gray-400 text-center mt-auto mb-4). Import { Linking } from 'react-native'.\n\n5. mobile/app/(protected)/(tabs)/index.tsx: Already addressed in enhance_008 with skeleton loading states.\n\nGeneral pattern for all loading states: Use View with className='bg-gray-200 rounded-xl animate-pulse' as skeleton placeholders. General pattern for all error states: centered View with icon, message text (text-gray-500), and retry button (bg-blue-600 rounded-xl py-3 px-6).",
+      "status": "pending",
+      "priority": 6,
+      "depends_on": [
+        "enhance_008",
+        "enhance_009"
+      ],
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
+    },
+    {
+      "id": "enhance_011",
+      "title": "Mobile: Haptic Feedback on All Interactive Elements",
+      "description": "Audit and add haptic feedback to every interactive element that currently lacks it. The app has haptics.ts with hapticSuccess, hapticError, hapticWarning, hapticLight, hapticMedium, hapticSelection functions but many touchable elements don't use them.\n\nFiles to modify:\n\n1. mobile/app/(auth)/login.tsx: Add hapticMedium() in handleLogin before the API call. Add hapticError() in the catch block. Add hapticLight() on 'Create Account' and 'Skip for now' link press.\n\n2. mobile/app/(auth)/register.tsx: Add hapticMedium() in handleRegister before API call. Add hapticError() in catch block and validation error cases. Add hapticLight() on 'Sign In' link press.\n\n3. mobile/app/(protected)/progress.tsx: Add hapticSelection() on toggleCompareMode (already has it). Add hapticSelection() on each photo press in handlePhotoPress. Add hapticSuccess() when compare modal opens (both photos selected). Add hapticLight() on close button in compare modal.\n\n4. mobile/app/(protected)/analysis/[id].tsx: Add hapticLight() on back button press. Add hapticMedium() on 'View Your Glow Plan' button press. Add hapticLight() on 'Scan Again' press.\n\n5. mobile/app/(protected)/glow-plan.tsx: hapticSuccess already on toggle complete. Add hapticWarning() on regenerate plan confirmation. Add hapticSelection() on category filter selection (in CategoryFilter component or inline).\n\n6. mobile/app/(protected)/settings.tsx: Add hapticLight() on Sign Out press. Add hapticSelection() on biometric toggle. hapticWarning already on delete.\n\n7. mobile/components/glow-plan/CategoryFilter.tsx: Add hapticSelection() on each category pill press. Import { hapticSelection } from '../../lib/haptics'.\n\n8. mobile/components/home/ScoreRing.tsx: No interaction needed.\n\nImport pattern: import { hapticLight, hapticMedium, hapticSelection, hapticSuccess, hapticError } from '../../lib/haptics' (adjust path per file depth).",
+      "status": "pending",
+      "priority": 6,
+      "depends_on": [],
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
+    },
+    {
+      "id": "enhance_012",
+      "title": "Backend: Rate Limiting + Usage Tracking for Free Tier",
+      "description": "Add per-user rate limiting on the AI analysis endpoint to enforce free tier (3 scans/day) vs unlimited for premium users.\n\nFiles to create/modify:\n\n1. backend/internal/models/usage.go (NEW): Create DailyUsage model with fields: ID (uuid, pk), UserID (uuid, indexed), Date (date, composite index with user_id), AnalysisCount (int, default 0), CreatedAt, UpdatedAt. Add to database.go AutoMigrate list.\n\n2. backend/internal/services/usage_service.go (NEW): Create UsageService struct with db *gorm.DB. Methods: (a) CheckAndIncrementUsage(userID uuid.UUID) (bool, int, error): Query DailyUsage for today's date and user. If not exists create with count=1, return (true, 1, nil). If exists and count \u003c FREE_LIMIT (const 3), increment and return (true, newCount, nil). If count \u003e= FREE_LIMIT, check if user has active subscription: query Subscription model where user_id = userID AND status = 'active' AND current_period_end \u003e now(). If subscribed, increment and return (true, newCount, nil). If not subscribed, return (false, count, nil). (b) GetRemainingUses(userID uuid.UUID) (int, error): Return max(0, FREE_LIMIT - todayCount) for non-subscribers, or -1 (unlimited) for subscribers.\n\n3. backend/internal/handlers/ai_analysis_handler.go: Before calling the AI service, call usageService.CheckAndIncrementUsage(userID). If returns false, respond with 429 status: {\"error\": true, \"message\": \"Daily scan limit reached. Upgrade to Premium for unlimited scans.\", \"remaining_uses\": 0, \"is_premium\": false}. On success, include remaining_uses in the response.\n\n4. backend/internal/routes/routes.go: Add GET /api/usage/remaining route (protected) that returns remaining daily uses.\n\n5. backend/cmd/server/main.go: Create usageService, wire into aiAnalysisHandler and add usage handler.\n\n6. backend/internal/database/database.go: Add models.DailyUsage{} to AutoMigrate call.",
+      "status": "pending",
+      "priority": 9,
+      "depends_on": [
+        "enhance_001"
+      ],
+      "test_command": "cd backend \u0026\u0026 go build ./...",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
+    },
+    {
+      "id": "enhance_013",
+      "title": "Mobile: Share Results with Native Share API + Result Cards",
+      "description": "Upgrade the sharing feature to use React Native's native Share API and expo-sharing for rich sharing experience.\n\nFiles to modify:\n\n1. mobile/components/analysis/ShareButton.tsx: Complete rewrite. Remove clipboard-only approach. New implementation:\n- Import { Share, Platform } from 'react-native' and * as Sharing from 'expo-sharing'.\n- handleShare function: (a) Build share message string: 'I scored {overallScore}/10 on Mewify! 🧚‍♀️\\n\\nMy Strengths:\\n✨ {strengths[0]}\\n✨ {strengths[1]}\\n✨ {strengths[2]}\\n\\nDownload Mewify and get your score!', (b) Call Share.share({ message: shareMessage, title: 'My Mewify Score' }). (c) If Share result action === Share.sharedAction, hapticSuccess(). (d) Keep clipboard fallback: if share fails, fall back to Clipboard.setStringAsync().\n- UI update: Replace the current small button with a larger card-style share CTA. View bg-blue-50 rounded-2xl p-4 border border-blue-100. Row layout: left side has share-social-outline icon (24, blue-600), right side has text 'Share Your Results' (text-base font-semibold text-blue-600) and subtitle 'Let your friends know your score' (text-sm text-blue-400). Active state: active:bg-blue-100.\n- Keep the copied success state (green border, checkmark icon) for clipboard fallback.\n\n2. mobile/app/(protected)/analysis/[id].tsx: After the ShareButton, add a 'Share on social' prompt: View with text 'Proud of your score? Share it!' (text-sm text-gray-500 text-center mt-2 mb-4). This encourages engagement.\n\nThe expo-sharing package (v14.0.4) is already in package.json dependencies, so no installation needed.",
+      "status": "pending",
+      "priority": 6,
+      "depends_on": [
+        "enhance_006"
+      ],
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
+    },
+    {
+      "id": "enhance_014",
+      "title": "Mobile: Delete Legacy Template Files + Fix Broken Routes",
+      "description": "Clean up legacy template files and fix all broken navigation routes throughout the app.\n\nFiles to modify/delete:\n\n1. mobile/app/(protected)/home.tsx: DELETE this file entirely. It's a legacy template that shows 'App Factory', 'Welcome {email}', 'Your MVP starts here' — pure placeholder content that violates Apple Guideline 2.1 (App Completeness). The real home screen is at (protected)/(tabs)/index.tsx. This file should not exist.\n\n2. mobile/app/(protected)/(tabs)/index.tsx: The 'Scan Your Face' button previously navigated to '/results' which doesn't exist. After enhance_005, it navigates to '/(protected)/scan'. Verify this is correct.\n\n3. mobile/app/(protected)/analysis/[id].tsx: Fix 'View Your Glow Plan' button route from '/(protected)/plan' to '/(protected)/glow-plan'. Fix 'Scan Again' button route from '/(protected)/scan' (now exists after enhance_005). These are already addressed in enhance_006 but verify.\n\n4. mobile/app/(protected)/_layout.tsx: Verify that all screens have proper tab bar configuration. Ensure 'home' (the legacy file) doesn't show up as a separate tab. The tabs should only be: (tabs)/index (Home icon), mewing, progress, settings. Hidden screens (href: null): glow-plan, analysis/[id], scan. Remove the home.tsx href entry if it exists in the Tabs config.\n\n5. mobile/app/index.tsx: After enhance_004, verify the routing chain works: onboarding → auth/guest → protected. Ensure there are no circular redirects.\n\nThis task is primarily cleanup — removing placeholder content and ensuring all navigation paths lead to real, functional screens.",
+      "status": "pending",
+      "priority": 8,
+      "depends_on": [
+        "enhance_004",
+        "enhance_005"
+      ],
+      "test_command": "cd mobile \u0026\u0026 npx tsc --noEmit",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": ""
     }
   ]
 }
