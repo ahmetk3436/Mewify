@@ -20,10 +20,18 @@ type LoginRequest struct {
 
 // RefreshTokenRequest represents the request body for refreshing a token
 type RefreshTokenRequest struct {
-	RefreshToken string `json:"refreshToken"`
+	RefreshToken string `json:"refresh_token"`
+}
+
+// LogoutRequest represents the request body for logout
+type LogoutRequest struct {
+	RefreshToken string `json:"refresh_token"`
 }
 
 // AppleSignInRequest represents the request body for Sign in with Apple
 type AppleSignInRequest struct {
-	IdentityToken string `json:"identityToken"`
+	IdentityToken     string `json:"identity_token"`
+	AuthorizationCode string `json:"authorization_code"`
+	FullName          string `json:"full_name"`
+	Email             string `json:"email"`
 }

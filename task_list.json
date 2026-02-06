@@ -4,25 +4,25 @@
       "id": "enhance_001",
       "title": "Backend: AI Face Analysis with OpenAI Vision API",
       "description": "Create a new AI analysis service and endpoint that accepts a base64 image and returns real AI-scored face analysis using OpenAI GPT-4o-mini (free tier) or GPT-4o (premium tier).\n\nFiles to modify:\n- backend/internal/config/config.go: Add OpenAIAPIKey string field, load from OPENAI_API_KEY env var. Add OpenAIModel string field defaulting to 'gpt-4o-mini'.\n- backend/internal/services/ai_analysis_service.go (NEW): Create AiAnalysisService struct with db *gorm.DB and cfg *config.Config fields. Method AnalyzeImage(userID uuid.UUID, imageBase64 string) (*models.FaceAnalysis, error) that: (1) Builds OpenAI API request to POST https://api.openai.com/v1/chat/completions with model from config, (2) System prompt instructs GPT to analyze the face photo and return JSON with fields: overall_score(1-10 float), symmetry_score, jawline_score, skin_score, eye_score, nose_score, lips_score, harmony_score, strengths([]string, 3 items), improvements([]string, 3 items), (3) User message contains image_url with data:image/jpeg;base64,{imageBase64} content type, (4) Parses the JSON response via json.Unmarshal into a struct, (5) Creates FaceAnalysis model record in database with all scores and returns it. Use net/http for the API call with 30s timeout. Add OPENAI_API_KEY to config.go Load() function.\n- backend/internal/handlers/ai_analysis_handler.go (NEW): Create AiAnalysisHandler with the service. Single endpoint AnalyzeFace(c *fiber.Ctx) that parses {\"image_base64\": \"...\"} body, extracts userID from JWT locals, calls service.AnalyzeImage(), returns the full FaceAnalysisResponse DTO.\n- backend/internal/routes/routes.go: Add protected.Post(\"/analyses/ai\", aiAnalysisHandler.AnalyzeFace) route. Import and wire the new handler in Setup() params.\n- backend/cmd/server/main.go: Create aiAnalysisService := services.NewAiAnalysisService(database.DB, cfg), create aiAnalysisHandler, pass to routes.Setup().\n\nThe OpenAI request body structure: {\"model\": cfg.OpenAIModel, \"messages\": [{\"role\": \"system\", \"content\": \"You are a facial aesthetics AI...Return ONLY valid JSON...\"}, {\"role\": \"user\", \"content\": [{\"type\": \"image_url\", \"image_url\": {\"url\": \"data:image/jpeg;base64,...\"}}]}], \"max_tokens\": 1000}. Parse response.choices[0].message.content as JSON into the scores struct.",
+      "status": "completed",
+      "priority": 10,
+      "depends_on": [],
+      "test_command": "cd backend \u0026\u0026 go build ./...",
+      "auto_commit": true,
+      "created_at": "",
+      "updated_at": "2026-02-06T22:29:05Z"
+    },
+    {
+      "id": "enhance_002",
+      "title": "Backend: Fix Auth Stubs (Refresh Token + Logout + Apple JWT)",
+      "description": "Fix three critical auth stubs that currently return placeholder responses.\n\nFiles to modify:\n\n1. backend/internal/handlers/auth_handler.go - Refresh method (lines 59-62): Replace stub with real implementation. Parse RefreshTokenRequest body, call h.service.RefreshToken(req.RefreshToken), return new access token. Logout method (lines 89-92): Parse {\"refresh_token\": \"...\"} body, call h.service.Logout(refreshToken) to revoke the token in DB.\n\n2. backend/internal/services/auth_service.go:\n- Add RefreshToken(refreshTokenStr string) (string, error) method: (a) Hash the incoming refresh token with SHA-256, (b) Query RefreshToken model where token_hash = hashed AND revoked = false AND expires_at \u003e now, (c) If not found return error, (d) Generate new access JWT via generateJWT(token.UserID), (e) Return new access token string.\n- Add Logout(refreshTokenStr string) error method: (a) Hash the token, (b) Update RefreshToken set revoked = true where token_hash = hashed.\n- Fix Register and Login to also generate refresh tokens: After generating access JWT, create a random 64-byte token via crypto/rand, SHA-256 hash it, store hash in RefreshToken model with user_id, expires_at = now + cfg.JWTRefreshExpiry. Return both access_token and raw refresh_token string to client.\n- Fix AppleSignIn (line 93): Replace hardcoded email 'apple_user@example.com' with real Apple JWT parsing. Decode the identityToken as JWT (it's a standard JWT from Apple), extract the 'email' claim from payload without full signature verification (Apple tokens are verified client-side by the SDK). Use base64 URL decode on the payload segment: parts := strings.Split(identityToken, \".\"), decode parts[1], unmarshal to get email and sub claims.\n\n3. backend/internal/handlers/auth_handler.go - Update Register and Login responses to include both \"token\" and \"refresh_token\" fields.\n\nAdd import \"crypto/rand\", \"crypto/sha256\", \"encoding/hex\", \"encoding/base64\", \"strings\" to auth_service.go as needed.",
       "status": "in_progress",
       "priority": 10,
       "depends_on": [],
       "test_command": "cd backend \u0026\u0026 go build ./...",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": "2026-02-06T22:23:40Z"
-    },
-    {
-      "id": "enhance_002",
-      "title": "Backend: Fix Auth Stubs (Refresh Token + Logout + Apple JWT)",
-      "description": "Fix three critical auth stubs that currently return placeholder responses.\n\nFiles to modify:\n\n1. backend/internal/handlers/auth_handler.go - Refresh method (lines 59-62): Replace stub with real implementation. Parse RefreshTokenRequest body, call h.service.RefreshToken(req.RefreshToken), return new access token. Logout method (lines 89-92): Parse {\"refresh_token\": \"...\"} body, call h.service.Logout(refreshToken) to revoke the token in DB.\n\n2. backend/internal/services/auth_service.go:\n- Add RefreshToken(refreshTokenStr string) (string, error) method: (a) Hash the incoming refresh token with SHA-256, (b) Query RefreshToken model where token_hash = hashed AND revoked = false AND expires_at \u003e now, (c) If not found return error, (d) Generate new access JWT via generateJWT(token.UserID), (e) Return new access token string.\n- Add Logout(refreshTokenStr string) error method: (a) Hash the token, (b) Update RefreshToken set revoked = true where token_hash = hashed.\n- Fix Register and Login to also generate refresh tokens: After generating access JWT, create a random 64-byte token via crypto/rand, SHA-256 hash it, store hash in RefreshToken model with user_id, expires_at = now + cfg.JWTRefreshExpiry. Return both access_token and raw refresh_token string to client.\n- Fix AppleSignIn (line 93): Replace hardcoded email 'apple_user@example.com' with real Apple JWT parsing. Decode the identityToken as JWT (it's a standard JWT from Apple), extract the 'email' claim from payload without full signature verification (Apple tokens are verified client-side by the SDK). Use base64 URL decode on the payload segment: parts := strings.Split(identityToken, \".\"), decode parts[1], unmarshal to get email and sub claims.\n\n3. backend/internal/handlers/auth_handler.go - Update Register and Login responses to include both \"token\" and \"refresh_token\" fields.\n\nAdd import \"crypto/rand\", \"crypto/sha256\", \"encoding/hex\", \"encoding/base64\", \"strings\" to auth_service.go as needed.",
-      "status": "pending",
-      "priority": 10,
-      "depends_on": [],
-      "test_command": "cd backend \u0026\u0026 go build ./...",
-      "auto_commit": true,
-      "created_at": "",
-      "updated_at": ""
+      "updated_at": "2026-02-06T22:29:05Z"
     },
     {
       "id": "enhance_003",
