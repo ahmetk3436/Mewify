@@ -3,6 +3,11 @@
 .env.local
 .env.*.local
 
+# Generated files
+CLAUDE.md
+**/CLAUDE.md
+human_req.txt
+
 # Generated projects (separate repos)
 EcoMonitor-AI/
 fully-autonomous-mobile-system/
@@ -34,3 +39,4 @@ Thumbs.db
 
 # Logs
 *.log
+logs/
