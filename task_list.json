@@ -16,19 +16,19 @@
       "id": "enhance_002",
       "title": "Backend: Fix Auth Stubs (Refresh Token + Logout + Apple JWT)",
       "description": "Fix three critical auth stubs that currently return placeholder responses.\n\nFiles to modify:\n\n1. backend/internal/handlers/auth_handler.go - Refresh method (lines 59-62): Replace stub with real implementation. Parse RefreshTokenRequest body, call h.service.RefreshToken(req.RefreshToken), return new access token. Logout method (lines 89-92): Parse {\"refresh_token\": \"...\"} body, call h.service.Logout(refreshToken) to revoke the token in DB.\n\n2. backend/internal/services/auth_service.go:\n- Add RefreshToken(refreshTokenStr string) (string, error) method: (a) Hash the incoming refresh token with SHA-256, (b) Query RefreshToken model where token_hash = hashed AND revoked = false AND expires_at \u003e now, (c) If not found return error, (d) Generate new access JWT via generateJWT(token.UserID), (e) Return new access token string.\n- Add Logout(refreshTokenStr string) error method: (a) Hash the token, (b) Update RefreshToken set revoked = true where token_hash = hashed.\n- Fix Register and Login to also generate refresh tokens: After generating access JWT, create a random 64-byte token via crypto/rand, SHA-256 hash it, store hash in RefreshToken model with user_id, expires_at = now + cfg.JWTRefreshExpiry. Return both access_token and raw refresh_token string to client.\n- Fix AppleSignIn (line 93): Replace hardcoded email 'apple_user@example.com' with real Apple JWT parsing. Decode the identityToken as JWT (it's a standard JWT from Apple), extract the 'email' claim from payload without full signature verification (Apple tokens are verified client-side by the SDK). Use base64 URL decode on the payload segment: parts := strings.Split(identityToken, \".\"), decode parts[1], unmarshal to get email and sub claims.\n\n3. backend/internal/handlers/auth_handler.go - Update Register and Login responses to include both \"token\" and \"refresh_token\" fields.\n\nAdd import \"crypto/rand\", \"crypto/sha256\", \"encoding/hex\", \"encoding/base64\", \"strings\" to auth_service.go as needed.",
-      "status": "in_progress",
+      "status": "completed",
       "priority": 10,
       "depends_on": [],
       "test_command": "cd backend \u0026\u0026 go build ./...",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": "2026-02-06T22:29:05Z"
+      "updated_at": "2026-02-06T22:33:40Z"
     },
     {
       "id": "enhance_003",
       "title": "Backend: AI-Powered Glow Plan Generation",
       "description": "Replace the mock recommendation generator in glow_plan_service.go with real AI-powered recommendations using OpenAI GPT-4o-mini.\n\nFiles to modify:\n\n1. backend/internal/services/glow_plan_service.go:\n- Add cfg *config.Config to GlowPlanService struct. Update NewGlowPlanService to accept cfg parameter.\n- Replace generateMockRecommendations() (lines 98-150) with generateAIRecommendations(userID, analysisID uuid.UUID, analysis *models.FaceAnalysis) ([]models.GlowPlan, error). This method: (a) Builds a prompt containing the user's scores: 'User face analysis scores: overall={OverallScore}, symmetry={SymmetryScore}, jawline={JawlineScore}, skin={SkinScore}, eye={EyeScore}, nose={NoseScore}, lips={LipsScore}, harmony={HarmonyScore}. Strengths: {Strengths}. Improvements: {Improvements}. Generate 5-7 personalized improvement recommendations as JSON array with fields: category(jawline|skin|style|fitness|grooming), title(short actionable title), description(2-3 sentence detailed advice), difficulty(easy|medium|hard), timeframe_weeks(1-12), priority(1-5, 5=highest). Focus recommendations on lowest-scoring areas.', (b) Calls OpenAI API via POST https://api.openai.com/v1/chat/completions with cfg.OpenAIAPIKey, (c) Parses JSON array response, (d) Creates GlowPlan model for each recommendation.\n- Delete getMockTitle, getMockDescription, getRandomDifficulty helper methods (lines 152-204).\n- Update GenerateGlowPlan to call generateAIRecommendations instead of generateMockRecommendations.\n\n2. backend/cmd/server/main.go: Update NewGlowPlanService call to pass cfg.\n\nKeep the existing database save logic (delete old plans, create new ones in loop). The AI prompt should explicitly request JSON-only output with no markdown formatting.",
-      "status": "pending",
+      "status": "in_progress",
       "priority": 10,
       "depends_on": [
         "enhance_001"
@@ -36,7 +36,7 @@
       "test_command": "cd backend \u0026\u0026 go build ./...",
       "auto_commit": true,
       "created_at": "",
-      "updated_at": ""
+      "updated_at": "2026-02-06T22:33:40Z"
     },
     {
       "id": "enhance_004",

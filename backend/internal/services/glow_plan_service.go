@@ -1,22 +1,29 @@
 package services
 
 import (
+	"bytes"
+	"encoding/json"
 	"errors"
-	"math/rand"
+	"fmt"
+	"io"
+	"net/http"
+	"strings"
 	"time"
 
 	"github.com/google/uuid"
 	"gorm.io/gorm"
 
+	"github.com/ahmetcoskunkizilkaya/mewify/backend/internal/config"
 	"github.com/ahmetcoskunkizilkaya/mewify/backend/internal/models"
 )
 
 type GlowPlanService struct {
-	db *gorm.DB
+	db  *gorm.DB
+	cfg *config.Config
 }
 
-func NewGlowPlanService(db *gorm.DB) *GlowPlanService {
-	return &GlowPlanService{db: db}
+func NewGlowPlanService(db *gorm.DB, cfg *config.Config) *GlowPlanService {
+	return &GlowPlanService{db: db, cfg: cfg}
 }
 
 func (s *GlowPlanService) GetUserGlowPlans(userID uuid.UUID) ([]models.GlowPlan, error) {
@@ -40,8 +47,11 @@ func (s *GlowPlanService) GenerateGlowPlan(userID, analysisID uuid.UUID) ([]mode
 	// Delete existing plans for this user (regenerate)
 	s.db.Where("user_id = ?", userID).Delete(&models.GlowPlan{})
 
-	// Generate mock recommendations based on lowest scoring areas
-	recommendations := s.generateMockRecommendations(userID, analysisID, &analysis)
+	// Generate AI-powered recommendations based on analysis scores
+	recommendations, err := s.generateAIRecommendations(userID, analysisID, &analysis)
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate recommendations: %w", err)
+	}
 
 	// Save to database
 	var createdPlans []models.GlowPlan
@@ -94,111 +104,137 @@ func (s *GlowPlanService) GetUserProgress(userID uuid.UUID) (int, int, error) {
 	return int(total), int(completed), nil
 }
 
-// Private helper methods
-func (s *GlowPlanService) generateMockRecommendations(userID, analysisID uuid.UUID, analysis *models.FaceAnalysis) []models.GlowPlan {
-	// Score map for prioritization
-	scores := map[string]float64{
-		"jawline":  analysis.JawlineScore,
-		"skin":     analysis.SkinScore,
-		"style":    (analysis.OverallScore + analysis.HarmonyScore) / 2,
-		"fitness":  analysis.JawlineScore,
-		"grooming": (analysis.SkinScore + analysis.OverallScore) / 2,
+// AI recommendation types
+
+type glowPlanAIRecommendation struct {
+	Category       string `json:"category"`
+	Title          string `json:"title"`
+	Description    string `json:"description"`
+	Difficulty     string `json:"difficulty"`
+	TimeframeWeeks int    `json:"timeframe_weeks"`
+	Priority       int    `json:"priority"`
+}
+
+func (s *GlowPlanService) generateAIRecommendations(userID, analysisID uuid.UUID, analysis *models.FaceAnalysis) ([]models.GlowPlan, error) {
+	strengthsList := strings.Join(analysis.Strengths, ", ")
+	improvementsList := strings.Join(analysis.Improvements, ", ")
+
+	prompt := fmt.Sprintf(`User face analysis scores: overall=%.1f, symmetry=%.1f, jawline=%.1f, skin=%.1f, eye=%.1f, nose=%.1f, lips=%.1f, harmony=%.1f. Strengths: %s. Improvements: %s. Generate 5-7 personalized improvement recommendations as a JSON array with fields: category (one of: jawline, skin, style, fitness, grooming), title (short actionable title), description (2-3 sentence detailed advice), difficulty (one of: easy, medium, hard), timeframe_weeks (integer 1-12), priority (integer 1-5 where 5 is highest). Focus recommendations on the lowest-scoring areas. Return ONLY the JSON array, no markdown formatting, no code fences, no extra text.`,
+		analysis.OverallScore,
+		analysis.SymmetryScore,
+		analysis.JawlineScore,
+		analysis.SkinScore,
+		analysis.EyeScore,
+		analysis.NoseScore,
+		analysis.LipsScore,
+		analysis.HarmonyScore,
+		strengthsList,
+		improvementsList,
+	)
+
+	reqBody := openAIRequest{
+		Model: s.cfg.OpenAIModel,
+		Messages: []openAIMessage{
+			{
+				Role:    "system",
+				Content: "You are a personalized beauty and self-improvement advisor. You provide actionable, specific recommendations based on facial analysis data. Always respond with ONLY valid JSON, no markdown, no code fences, no explanation text.",
+			},
+			{
+				Role:    "user",
+				Content: prompt,
+			},
+		},
+		MaxTokens: 2000,
 	}
 
-	// Sort categories by score (lowest first = higher priority)
-	type catScore struct {
-		cat   string
-		score float64
-	}
-	var sorted []catScore
-	for cat, score := range scores {
-		sorted = append(sorted, catScore{cat, score})
-	}
-	// Simple bubble sort
-	for i := 0; i < len(sorted); i++ {
-		for j := i + 1; j < len(sorted); j++ {
-			if sorted[j].score < sorted[i].score {
-				sorted[i], sorted[j] = sorted[j], sorted[i]
-			}
-		}
+	jsonBody, err := json.Marshal(reqBody)
+	if err != nil {
+		return nil, fmt.Errorf("failed to marshal openai request: %w", err)
 	}
 
-	// Generate 5-8 recommendations
-	rand.Seed(time.Now().UnixNano())
-	numRecs := 5 + rand.Intn(4)
+	client := &http.Client{Timeout: 30 * time.Second}
+	httpReq, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(jsonBody))
+	if err != nil {
+		return nil, fmt.Errorf("failed to create http request: %w", err)
+	}
+	httpReq.Header.Set("Content-Type", "application/json")
+	httpReq.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
+
+	resp, err := client.Do(httpReq)
+	if err != nil {
+		return nil, fmt.Errorf("openai api request failed: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("failed to read openai response: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("openai api returned status %d: %s", resp.StatusCode, string(body))
+	}
+
+	var openAIResp openAIResponse
+	if err := json.Unmarshal(body, &openAIResp); err != nil {
+		return nil, fmt.Errorf("failed to parse openai response: %w", err)
+	}
+
+	if len(openAIResp.Choices) == 0 {
+		return nil, fmt.Errorf("openai returned no choices")
+	}
+
+	content := strings.TrimSpace(openAIResp.Choices[0].Message.Content)
+	// Strip markdown code fences if present (defensive)
+	content = strings.TrimPrefix(content, "```json")
+	content = strings.TrimPrefix(content, "```")
+	content = strings.TrimSuffix(content, "```")
+	content = strings.TrimSpace(content)
+
+	var aiRecs []glowPlanAIRecommendation
+	if err := json.Unmarshal([]byte(content), &aiRecs); err != nil {
+		return nil, fmt.Errorf("failed to parse ai recommendations: %w", err)
+	}
 
 	var recommendations []models.GlowPlan
-	for i := 0; i < numRecs; i++ {
-		cat := sorted[i%len(sorted)].cat
-		priority := 5 - (i % 5) // Higher priority for lower scoring areas
+	for _, rec := range aiRecs {
+		// Validate and clamp values to match database constraints
+		category := rec.Category
+		if category != "jawline" && category != "skin" && category != "style" && category != "fitness" && category != "grooming" {
+			category = "grooming"
+		}
+		difficulty := rec.Difficulty
+		if difficulty != "easy" && difficulty != "medium" && difficulty != "hard" {
+			difficulty = "medium"
+		}
+		priority := rec.Priority
+		if priority < 1 {
+			priority = 1
+		}
+		if priority > 5 {
+			priority = 5
+		}
+		timeframe := rec.TimeframeWeeks
+		if timeframe < 1 {
+			timeframe = 1
+		}
+		if timeframe > 12 {
+			timeframe = 12
+		}
 
 		plan := models.GlowPlan{
 			UserID:         userID,
 			AnalysisID:     analysisID,
-			Category:       cat,
-			Title:          s.getMockTitle(cat),
-			Description:    s.getMockDescription(cat),
+			Category:       category,
+			Title:          rec.Title,
+			Description:    rec.Description,
 			Priority:       priority,
-			Difficulty:     s.getRandomDifficulty(),
-			TimeframeWeeks: 2 + rand.Intn(6),
+			Difficulty:     difficulty,
+			TimeframeWeeks: timeframe,
 			IsCompleted:    false,
 		}
 		recommendations = append(recommendations, plan)
 	}
 
-	return recommendations
-}
-
-func (s *GlowPlanService) getMockTitle(category string) string {
-	titles := map[string][]string{
-		"jawline": {
-			"Improve Jaw Definition",
-			"Enhance Jawline Structure",
-			"Define Your Jawline",
-		},
-		"skin": {
-			"Clear Skin Routine",
-			"Brighten Skin Tone",
-			"Reduce Skin Imperfections",
-		},
-		"style": {
-			"Update Your Wardrobe",
-			"Find Your Personal Style",
-			"Enhance Your Look",
-		},
-		"fitness": {
-			"Full Body Workout Plan",
-			"Strength Training Routine",
-			"Cardio Improvement Plan",
-		},
-		"grooming": {
-			"Daily Grooming Routine",
-			"Hair Care Improvement",
-			"Personal Grooming Enhancement",
-		},
-	}
-	list := titles[category]
-	if len(list) == 0 {
-		return "Improvement Plan"
-	}
-	return list[rand.Intn(len(list))]
-}
-
-func (s *GlowPlanService) getMockDescription(category string) string {
-	descriptions := map[string]string{
-		"jawline":  "Follow a specific facial exercise routine and maintain proper posture to enhance jawline definition over time.",
-		"skin":     "Implement a consistent skincare routine with cleansing, exfoliation, and moisturizing to improve skin health and appearance.",
-		"style":    "Update your wardrobe with well-fitting clothes that complement your body type and personal aesthetic.",
-		"fitness":  "Engage in regular strength training and cardiovascular exercise to improve overall physique and muscle tone.",
-		"grooming": "Establish a daily grooming routine including hair care, skincare, and personal hygiene for a polished appearance.",
-	}
-	if desc, ok := descriptions[category]; ok {
-		return desc
-	}
-	return "Follow a personalized improvement plan for better results."
-}
-
-func (s *GlowPlanService) getRandomDifficulty() string {
-	difficulties := []string{"easy", "medium", "hard"}
-	return difficulties[rand.Intn(len(difficulties))]
+	return recommendations, nil
 }

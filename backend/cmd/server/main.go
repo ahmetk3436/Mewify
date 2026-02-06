@@ -39,7 +39,7 @@ func main() {
 	moderationService := services.NewModerationService(database.DB)
 	faceAnalysisService := services.NewFaceAnalysisService(database.DB)
 	mewingService := services.NewMewingService(database.DB)
-	glowPlanService := services.NewGlowPlanService(database.DB)
+	glowPlanService := services.NewGlowPlanService(database.DB, cfg)
 	aiAnalysisService := services.NewAiAnalysisService(database.DB, cfg)
 
 	// Handlers
