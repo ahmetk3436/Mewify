@@ -53,6 +53,7 @@ func main() {
 	glowPlanHandler := handlers.NewGlowPlanHandler(glowPlanService)
 	aiAnalysisHandler := handlers.NewAiAnalysisHandler(aiAnalysisService, usageService)
 	usageHandler := handlers.NewUsageHandler(usageService)
+	legalHandler := handlers.NewLegalHandler()
 
 	// Fiber app
 	app := fiber.New(fiber.Config{
@@ -77,7 +78,7 @@ func main() {
 	app.Use("/api/auth", authLimiter)
 
 	// Routes
-	routes.Setup(app, cfg, authHandler, healthHandler, webhookHandler, moderationHandler, faceAnalysisHandler, mewingHandler, glowPlanHandler, aiAnalysisHandler, usageHandler)
+	routes.Setup(app, cfg, authHandler, healthHandler, webhookHandler, moderationHandler, faceAnalysisHandler, mewingHandler, glowPlanHandler, aiAnalysisHandler, usageHandler, legalHandler)
 
 	// Graceful shutdown
 	quit := make(chan os.Signal, 1)

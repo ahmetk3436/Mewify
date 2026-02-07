@@ -1,20 +1,38 @@
 {
   "expo": {
-    "name": "mobile",
-    "slug": "mobile",
+    "name": "Mewify",
+    "slug": "mewify",
     "version": "1.0.0",
     "orientation": "portrait",
     "icon": "./assets/icon.png",
     "scheme": "appfactory",
     "userInterfaceStyle": "light",
     "newArchEnabled": true,
+    "owner": "ahmetcoskunkizilkaya",
+    "runtimeVersion": {
+      "policy": "appVersion"
+    },
+    "extra": {
+      "eas": {
+        "projectId": "FILL_IN"
+      }
+    },
     "splash": {
       "image": "./assets/splash-icon.png",
       "resizeMode": "contain",
       "backgroundColor": "#ffffff"
     },
     "ios": {
-      "supportsTablet": true
+      "supportsTablet": true,
+      "bundleIdentifier": "com.ahmetcoskunkizilkaya.mewify",
+      "buildNumber": "1",
+      "config": {
+        "usesNonExemptEncryption": false
+      },
+      "infoPlist": {
+        "NSCameraUsageDescription": "Mewify uses the camera to analyze your facial features and track mewing progress.",
+        "NSPhotoLibraryUsageDescription": "Mewify accesses your photo library to analyze photos for facial feature tracking."
+      }
     },
     "android": {
       "adaptiveIcon": {

@@ -19,11 +19,16 @@ func Setup(
 	glowPlanHandler *handlers.GlowPlanHandler,
 	aiAnalysisHandler *handlers.AiAnalysisHandler,
 	usageHandler *handlers.UsageHandler,
+	legalHandler *handlers.LegalHandler,
 ) {
 	api := app.Group("/api")
 
 	// Health
 	api.Get("/health", healthHandler.Check)
+
+	// Legal pages (public, required for App Store)
+	api.Get("/privacy-policy", legalHandler.PrivacyPolicy)
+	api.Get("/terms", legalHandler.TermsOfService)
 
 	// Auth (public)
 	auth := api.Group("/auth")
