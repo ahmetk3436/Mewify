@@ -1,95 +1,81 @@
-import React from 'react';
-import { View, ActivityIndicator } from 'react-native';
-import { Redirect, Tabs } from 'expo-router';
+import React, { useEffect } from 'react';
+import { View, Text, Pressable, ActivityIndicator } from 'react-native';
+import { Slot, useRouter, usePathname } from 'expo-router';
 import { Ionicons } from '@expo/vector-icons';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import { hapticSelection } from '../../lib/haptics';
 
+const TABS = [
+  { name: 'home', label: 'Home', icon: 'home', iconOutline: 'home-outline', path: '/(protected)/home' },
+  { name: 'mewing', label: 'Mewing', icon: 'fitness', iconOutline: 'fitness-outline', path: '/(protected)/mewing' },
+  { name: 'progress', label: 'Progress', icon: 'images', iconOutline: 'images-outline', path: '/(protected)/progress' },
+  { name: 'settings', label: 'Settings', icon: 'person', iconOutline: 'person-outline', path: '/(protected)/settings' },
+] as const;
+
 export default function ProtectedLayout() {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAuthenticated, isLoading, isGuest } = useAuth();
+  const router = useRouter();
+  const pathname = usePathname();
+  const insets = useSafeAreaInsets();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated && !isGuest) {
+      router.replace('/(auth)/login');
+    }
+  }, [isAuthenticated, isLoading, isGuest]);
 
   if (isLoading) {
     return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#2563eb" />
+      <View className="flex-1 items-center justify-center bg-gray-950">
+        <ActivityIndicator size="large" color="#3b82f6" />
       </View>
     );
   }
 
-  if (!isAuthenticated) {
-    return <Redirect href="/(auth)/login" />;
-  }
+  // Hide tab bar on detail screens
+  const hideTabBar = pathname.includes('/analysis/') || pathname.includes('/glow-plan') || pathname.includes('/paywall');
+
+  const isTabActive = (tabName: string) => {
+    if (tabName === 'home') return pathname === '/(protected)/home' || pathname === '/home';
+    return pathname.includes(tabName);
+  };
 
   return (
-    <Tabs
-      screenOptions={{
-        headerShown: false,
-        tabBarActiveTintColor: '#2563eb',
-        tabBarInactiveTintColor: '#9ca3af',
-        tabBarStyle: {
-          backgroundColor: '#ffffff',
-          borderTopColor: '#f3f4f6',
-        },
-      }}
-      screenListeners={{
-        tabPress: () => hapticSelection(),
-      }}
-    >
-      <Tabs.Screen
-        name="home"
-        options={{
-          title: 'Home',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="home-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="mewing"
-        options={{
-          title: 'Mewing',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="fitness-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="progress"
-        options={{
-          title: 'Progress',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="images-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      <Tabs.Screen
-        name="settings"
-        options={{
-          title: 'Settings',
-          tabBarIcon: ({ color, size }) => (
-            <Ionicons name="settings-outline" size={size} color={color} />
-          ),
-        }}
-      />
-      {/* Non-tab screens - hide from tab bar */}
-      <Tabs.Screen
-        name="glow-plan"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="analysis/[id]"
-        options={{
-          href: null,
-        }}
-      />
-      <Tabs.Screen
-        name="(tabs)"
-        options={{
-          href: null,
-        }}
-      />
-    </Tabs>
+    <View className="flex-1 bg-gray-950">
+      <Slot />
+      {!hideTabBar && (
+        <View
+          className="flex-row border-t border-gray-800 bg-gray-950"
+          style={{ paddingBottom: insets.bottom || 20 }}
+        >
+          {TABS.map((tab) => {
+            const active = isTabActive(tab.name);
+            return (
+              <Pressable
+                key={tab.name}
+                className="flex-1 items-center py-2"
+                onPress={() => {
+                  hapticSelection();
+                  router.push(tab.path as any);
+                }}
+              >
+                <Ionicons
+                  name={(active ? tab.icon : tab.iconOutline) as any}
+                  size={24}
+                  color={active ? '#3b82f6' : '#6b7280'}
+                />
+                <Text
+                  className="mt-1 text-xs"
+                  style={{ color: active ? '#3b82f6' : '#6b7280' }}
+                >
+                  {tab.label}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      )}
+    </View>
   );
 }

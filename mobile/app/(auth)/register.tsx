@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform } from 'react-native';
+import { View, Text, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
 import { Link } from 'expo-router';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -44,72 +45,76 @@ export default function RegisterScreen() {
   };
 
   return (
-    <KeyboardAvoidingView
-      className="flex-1 bg-white"
-      behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-    >
-      <View className="flex-1 justify-center px-8">
-        <Text className="mb-2 text-3xl font-bold text-gray-900">
-          Create account
-        </Text>
-        <Text className="mb-8 text-base text-gray-500">
-          Start building something great
-        </Text>
+    <SafeAreaView className="flex-1 bg-gray-950">
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      >
+        <View className="flex-1 justify-center px-8">
+          <Text className="mb-2 text-3xl font-bold text-white">
+            Create account
+          </Text>
+          <Text className="mb-8 text-base text-gray-400">
+            Start your glow-up journey
+          </Text>
 
-        {error ? (
-          <View className="mb-4 rounded-lg bg-red-50 p-3">
-            <Text className="text-sm text-red-600">{error}</Text>
+          {error ? (
+            <View className="mb-4 rounded-xl bg-red-900/30 border border-red-800 p-3">
+              <Text className="text-sm text-red-400">{error}</Text>
+            </View>
+          ) : null}
+
+          <View className="mb-4">
+            <Input
+              label="Email"
+              placeholder="you@example.com"
+              value={email}
+              onChangeText={setEmail}
+              autoCapitalize="none"
+              keyboardType="email-address"
+              textContentType="emailAddress"
+            />
           </View>
-        ) : null}
 
-        <View className="mb-4">
-          <Input
-            label="Email"
-            placeholder="you@example.com"
-            value={email}
-            onChangeText={setEmail}
-            autoCapitalize="none"
-            keyboardType="email-address"
-            textContentType="emailAddress"
+          <View className="mb-4">
+            <Input
+              label="Password"
+              placeholder="Min. 8 characters"
+              value={password}
+              onChangeText={setPassword}
+              secureTextEntry
+              textContentType="newPassword"
+            />
+          </View>
+
+          <View className="mb-6">
+            <Input
+              label="Confirm Password"
+              placeholder="Repeat your password"
+              value={confirmPassword}
+              onChangeText={setConfirmPassword}
+              secureTextEntry
+              textContentType="newPassword"
+            />
+          </View>
+
+          <Button
+            title="Create Account"
+            onPress={handleRegister}
+            isLoading={isLoading}
+            size="lg"
           />
-        </View>
 
-        <View className="mb-4">
-          <Input
-            label="Password"
-            placeholder="Min. 8 characters"
-            value={password}
-            onChangeText={setPassword}
-            secureTextEntry
-            textContentType="newPassword"
-          />
+          <View className="mt-6 flex-row items-center justify-center">
+            <Text className="text-gray-400">Already have an account? </Text>
+            <Link href="/(auth)/login" asChild>
+              <Pressable>
+                <Text className="font-semibold text-blue-400">Sign In</Text>
+              </Pressable>
+            </Link>
+          </View>
         </View>
-
-        <View className="mb-6">
-          <Input
-            label="Confirm Password"
-            placeholder="Repeat your password"
-            value={confirmPassword}
-            onChangeText={setConfirmPassword}
-            secureTextEntry
-            textContentType="newPassword"
-          />
-        </View>
-
-        <Button
-          title="Create Account"
-          onPress={handleRegister}
-          isLoading={isLoading}
-          size="lg"
-        />
-
-        <View className="mt-6 flex-row items-center justify-center">
-          <Text className="text-gray-500">Already have an account? </Text>
-          <Link href="/(auth)/login" asChild>
-            <Text className="font-semibold text-primary-600">Sign In</Text>
-          </Link>
-        </View>
-      </View>
-    </KeyboardAvoidingView>
+      </KeyboardAvoidingView>
+    </SafeAreaView>
   );
 }

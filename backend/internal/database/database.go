@@ -44,6 +44,7 @@ func InitDB(cfg *config.Config) {
 		&models.MewingProgress{},
 		&models.MewingGoal{},
 		&models.GlowPlan{},
+		&models.DailyUsage{},
 	)
 
 	if err != nil {

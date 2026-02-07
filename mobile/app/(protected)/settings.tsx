@@ -1,15 +1,45 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, Pressable, Alert, Switch } from 'react-native';
+import { View, Text, Pressable, Alert, Switch, ScrollView, Linking } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { useRouter } from 'expo-router';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import { isBiometricAvailable, getBiometricType } from '../../lib/biometrics';
-import { hapticWarning, hapticMedium } from '../../lib/haptics';
+import { hapticWarning, hapticMedium, hapticSelection } from '../../lib/haptics';
 import Button from '../../components/ui/Button';
 import Modal from '../../components/ui/Modal';
 import Input from '../../components/ui/Input';
 
+function SettingsRow({ icon, label, value, onPress, color = '#ffffff', showChevron = true }: {
+  icon: string;
+  label: string;
+  value?: string;
+  onPress?: () => void;
+  color?: string;
+  showChevron?: boolean;
+}) {
+  return (
+    <Pressable
+      className="flex-row items-center px-4 py-3.5"
+      onPress={() => {
+        if (onPress) {
+          hapticSelection();
+          onPress();
+        }
+      }}
+      disabled={!onPress}
+    >
+      <Ionicons name={icon as any} size={20} color={color === '#ffffff' ? '#9ca3af' : color} />
+      <Text className="ml-3 flex-1 text-base" style={{ color }}>{label}</Text>
+      {value && <Text className="mr-2 text-sm text-gray-500">{value}</Text>}
+      {showChevron && onPress && <Ionicons name="chevron-forward" size={16} color="#4b5563" />}
+    </Pressable>
+  );
+}
+
 export default function SettingsScreen() {
-  const { user, logout, deleteAccount } = useAuth();
+  const { user, isGuest, logout, deleteAccount } = useAuth();
+  const router = useRouter();
   const [biometricType, setBiometricType] = useState<string | null>(null);
   const [biometricEnabled, setBiometricEnabled] = useState(false);
   const [showDeleteModal, setShowDeleteModal] = useState(false);
@@ -46,7 +76,7 @@ export default function SettingsScreen() {
     hapticWarning();
     Alert.alert(
       'Delete Account',
-      'This action is permanent. All your data will be erased and cannot be recovered. Are you sure?',
+      'This action is permanent. All your data will be erased and cannot be recovered.',
       [
         { text: 'Cancel', style: 'cancel' },
         {
@@ -58,94 +88,145 @@ export default function SettingsScreen() {
     );
   };
 
-  // Restore Purchases (Guideline 3.1 — required on every paywall)
   const handleRestorePurchases = () => {
     hapticMedium();
-    // In production, call RevenueCat's restorePurchases method:
-    // await Purchases.restorePurchases();
     Alert.alert('Restore Purchases', 'Checking for previous purchases...');
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-white">
-      <View className="flex-1 px-6 pt-8">
-        <Text className="mb-8 text-3xl font-bold text-gray-900">Settings</Text>
+    <SafeAreaView className="flex-1 bg-gray-950">
+      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+        <View className="px-6 pt-4">
+          <Text className="mb-6 text-2xl font-bold text-white">Settings</Text>
 
-        {/* Account Section */}
-        <Text className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
-          Account
-        </Text>
-        <View className="mb-6 rounded-xl bg-gray-50 p-4">
-          <Text className="text-sm text-gray-500">Email</Text>
-          <Text className="mt-0.5 text-base font-medium text-gray-900">
-            {user?.email}
-          </Text>
-        </View>
-
-        {/* Security Section */}
-        <Text className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
-          Security
-        </Text>
-        <View className="mb-6 rounded-xl bg-gray-50">
-          {biometricType && (
-            <View className="flex-row items-center justify-between border-b border-gray-200 p-4">
-              <View>
-                <Text className="text-base font-medium text-gray-900">
-                  {biometricType}
-                </Text>
-                <Text className="text-sm text-gray-500">
-                  Use {biometricType} to unlock the app
-                </Text>
+          {/* Guest CTA */}
+          {isGuest && (
+            <Pressable
+              className="mb-6 rounded-2xl bg-blue-600 p-5"
+              onPress={() => {
+                hapticSelection();
+                router.push('/(auth)/register');
+              }}
+            >
+              <Text className="text-lg font-bold text-white">Create Your Account</Text>
+              <Text className="mt-1 text-sm text-blue-200">
+                Save your progress, unlock unlimited scans, and track your glow-up journey.
+              </Text>
+              <View className="mt-3 flex-row gap-3">
+                <Pressable
+                  className="rounded-xl bg-white px-4 py-2"
+                  onPress={() => router.push('/(auth)/register')}
+                >
+                  <Text className="font-semibold text-blue-600">Sign Up</Text>
+                </Pressable>
+                <Pressable
+                  className="rounded-xl border border-blue-400 px-4 py-2"
+                  onPress={() => router.push('/(auth)/login')}
+                >
+                  <Text className="font-semibold text-blue-200">Sign In</Text>
+                </Pressable>
               </View>
-              <Switch
-                value={biometricEnabled}
-                onValueChange={setBiometricEnabled}
-                trackColor={{ true: '#2563eb' }}
-              />
-            </View>
+            </Pressable>
           )}
-          <Pressable className="p-4" onPress={logout}>
-            <Text className="text-base font-medium text-gray-900">
-              Sign Out
-            </Text>
-          </Pressable>
-        </View>
 
-        {/* Purchases Section (Guideline 3.1) */}
-        <Text className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
-          Purchases
-        </Text>
-        <View className="mb-6 rounded-xl bg-gray-50">
-          <Pressable className="p-4" onPress={handleRestorePurchases}>
-            <Text className="text-base font-medium text-primary-600">
-              Restore Purchases
-            </Text>
-          </Pressable>
-        </View>
+          {/* Account Section */}
+          {!isGuest && (
+            <>
+              <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Account
+              </Text>
+              <View className="mb-6 rounded-2xl bg-gray-900 border border-gray-800">
+                <View className="px-4 py-3.5">
+                  <Text className="text-xs text-gray-500">Email</Text>
+                  <Text className="mt-0.5 text-base font-medium text-white">{user?.email}</Text>
+                </View>
+              </View>
+            </>
+          )}
 
-        {/* Danger Zone — Account Deletion (Guideline 5.1.1) */}
-        <Text className="mb-3 text-xs font-semibold uppercase tracking-wider text-gray-400">
-          Danger Zone
-        </Text>
-        <View className="rounded-xl bg-red-50">
-          <Pressable className="p-4" onPress={confirmDelete}>
-            <Text className="text-base font-medium text-red-600">
-              Delete Account
-            </Text>
-            <Text className="mt-0.5 text-sm text-red-400">
-              Permanently remove all your data
-            </Text>
-          </Pressable>
-        </View>
-      </View>
+          {/* Security Section */}
+          {!isGuest && (
+            <>
+              <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Security
+              </Text>
+              <View className="mb-6 rounded-2xl bg-gray-900 border border-gray-800">
+                {biometricType && (
+                  <View className="flex-row items-center justify-between border-b border-gray-800 px-4 py-3.5">
+                    <View className="flex-row items-center flex-1">
+                      <Ionicons name="finger-print" size={20} color="#9ca3af" />
+                      <View className="ml-3">
+                        <Text className="text-base text-white">{biometricType}</Text>
+                        <Text className="text-xs text-gray-500">Use to unlock the app</Text>
+                      </View>
+                    </View>
+                    <Switch
+                      value={biometricEnabled}
+                      onValueChange={setBiometricEnabled}
+                      trackColor={{ true: '#3b82f6' }}
+                    />
+                  </View>
+                )}
+                <SettingsRow icon="log-out-outline" label="Sign Out" onPress={logout} />
+              </View>
+            </>
+          )}
 
-      {/* Delete Account Confirmation Modal */}
+          {/* Purchases */}
+          <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            Purchases
+          </Text>
+          <View className="mb-6 rounded-2xl bg-gray-900 border border-gray-800">
+            <SettingsRow icon="card-outline" label="Restore Purchases" onPress={handleRestorePurchases} />
+          </View>
+
+          {/* App Section */}
+          <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+            App
+          </Text>
+          <View className="mb-6 rounded-2xl bg-gray-900 border border-gray-800">
+            <SettingsRow
+              icon="shield-checkmark-outline"
+              label="Privacy Policy"
+              onPress={() => Linking.openURL('https://mewify.app/privacy')}
+            />
+            <View className="mx-4 border-b border-gray-800" />
+            <SettingsRow
+              icon="document-text-outline"
+              label="Terms of Service"
+              onPress={() => Linking.openURL('https://mewify.app/terms')}
+            />
+            <View className="mx-4 border-b border-gray-800" />
+            <SettingsRow icon="information-circle-outline" label="Version" value="1.0.0" showChevron={false} />
+          </View>
+
+          {/* Danger Zone */}
+          {!isGuest && (
+            <>
+              <Text className="mb-2 text-xs font-semibold uppercase tracking-wider text-gray-500">
+                Danger Zone
+              </Text>
+              <View className="mb-8 rounded-2xl bg-gray-900 border border-red-900/50">
+                <SettingsRow
+                  icon="trash-outline"
+                  label="Delete Account"
+                  onPress={confirmDelete}
+                  color="#ef4444"
+                  showChevron={false}
+                />
+              </View>
+            </>
+          )}
+        </View>
+      </ScrollView>
+
+      {/* Delete Account Modal */}
       <Modal
         visible={showDeleteModal}
         onClose={() => setShowDeleteModal(false)}
         title="Confirm Deletion"
       >
-        <Text className="mb-4 text-sm text-gray-600">
+        <Text className="mb-4 text-sm text-gray-400">
           Enter your password to confirm account deletion. This cannot be undone.
         </Text>
         <View className="mb-4">

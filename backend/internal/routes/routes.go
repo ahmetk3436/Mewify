@@ -18,6 +18,7 @@ func Setup(
 	mewingHandler *handlers.MewingHandler,
 	glowPlanHandler *handlers.GlowPlanHandler,
 	aiAnalysisHandler *handlers.AiAnalysisHandler,
+	usageHandler *handlers.UsageHandler,
 ) {
 	api := app.Group("/api")
 
@@ -51,6 +52,9 @@ func Setup(
 
 	// AI Face Analysis (protected)
 	protected.Post("/analyses/ai", aiAnalysisHandler.AnalyzeFace)
+
+	// Usage tracking (protected)
+	protected.Get("/usage/remaining", usageHandler.GetRemaining)
 
 	// Mewing Progress (protected)
 	mewing := protected.Group("/mewing")
