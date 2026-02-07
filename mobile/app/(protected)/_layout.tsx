@@ -7,7 +7,7 @@ import { useAuth } from '../../contexts/AuthContext';
 import { hapticSelection } from '../../lib/haptics';
 
 const TABS = [
-  { name: 'home', label: 'Home', icon: 'home', iconOutline: 'home-outline', path: '/(protected)/home' },
+  { name: 'home', label: 'Home', icon: 'home', iconOutline: 'home-outline', path: '/(protected)/(tabs)' },
   { name: 'mewing', label: 'Mewing', icon: 'fitness', iconOutline: 'fitness-outline', path: '/(protected)/mewing' },
   { name: 'progress', label: 'Progress', icon: 'images', iconOutline: 'images-outline', path: '/(protected)/progress' },
   { name: 'settings', label: 'Settings', icon: 'person', iconOutline: 'person-outline', path: '/(protected)/settings' },
@@ -37,7 +37,7 @@ export default function ProtectedLayout() {
   const hideTabBar = pathname.includes('/analysis/') || pathname.includes('/glow-plan') || pathname.includes('/paywall');
 
   const isTabActive = (tabName: string) => {
-    if (tabName === 'home') return pathname === '/(protected)/home' || pathname === '/home';
+    if (tabName === 'home') return pathname === '/(protected)/(tabs)' || pathname === '/' || pathname.includes('(tabs)');
     return pathname.includes(tabName);
   };
 

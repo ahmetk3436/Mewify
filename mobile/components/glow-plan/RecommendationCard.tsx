@@ -2,6 +2,7 @@ import React, { useState } from 'react';
 import { View, Text, TouchableOpacity, LayoutAnimation, Platform, UIManager } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Recommendation } from '../../types/glow-plan';
+import { hapticSelection, hapticSuccess } from '../../lib/haptics';
 
 // Enable layout animation for Android
 if (Platform.OS === 'android' && UIManager.setLayoutAnimationEnabledExperimental) {
@@ -20,11 +21,13 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
   const [expanded, setExpanded] = useState(false);
 
   const handlePress = () => {
+    hapticSelection();
     LayoutAnimation.configureNext(LayoutAnimation.Presets.easeInEaseOut);
     setExpanded(!expanded);
   };
 
   const handleCheckboxPress = () => {
+    hapticSuccess();
     onToggleComplete(recommendation.id, !recommendation.completed);
   };
 
@@ -44,17 +47,17 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
   const getCategoryIcon = (category: string) => {
     switch (category) {
       case 'Jawline':
-        return '💪';
+        return 'fitness-outline';
       case 'Skin':
-        return '✨';
+        return 'sparkles-outline';
       case 'Style':
-        return '👔';
+        return 'shirt-outline';
       case 'Fitness':
-        return '🏃';
+        return 'barbell-outline';
       case 'Grooming':
-        return '✂️';
+        return 'cut-outline';
       default:
-        return '📋';
+        return 'list-outline';
     }
   };
 
@@ -68,7 +71,9 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
     >
       <View className="flex-row justify-between items-start mb-3">
         <View className="flex-row flex-1">
-          <Text className="text-2xl mr-3">{getCategoryIcon(recommendation.category)}</Text>
+          <View className="h-10 w-10 rounded-full bg-gray-100 items-center justify-center mr-3">
+            <Ionicons name={getCategoryIcon(recommendation.category) as any} size={20} color="#6b7280" />
+          </View>
           <View className="flex-1">
             <Text className="text-base font-semibold text-gray-900 mb-2">
               {recommendation.title}
@@ -87,8 +92,8 @@ const RecommendationCard: React.FC<RecommendationCardProps> = ({
             </View>
           </View>
         </View>
-        
-        <TouchableOpacity onPress={handleCheckboxPress} hitSlop={10}>
+
+        <TouchableOpacity onPress={handleCheckboxPress} hitSlop={{ top: 10, bottom: 10, left: 10, right: 10 }}>
           <Ionicons
             name={recommendation.completed ? "checkmark-circle" : "ellipse-outline"}
             size={24}

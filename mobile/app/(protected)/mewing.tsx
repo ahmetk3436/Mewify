@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput, Alert } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Modal, TextInput, Alert, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { hapticSuccess, hapticSelection } from '../../lib/haptics';
@@ -27,6 +27,8 @@ export default function MewingScreen() {
   const [notes, setNotes] = useState('');
   const [expandedSection, setExpandedSection] = useState<string | null>(null);
   const [weeklyData, setWeeklyData] = useState<boolean[]>([false, false, false, false, false, false, false]);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   useEffect(() => {
     loadData();
@@ -34,6 +36,8 @@ export default function MewingScreen() {
 
   const loadData = async () => {
     try {
+      setError(null);
+
       // Load today's progress
       const todayRes = await api.get('/mewing/today');
       if (todayRes.data.data) {
@@ -55,9 +59,43 @@ export default function MewingScreen() {
           longest_streak: streakRes.data.data.longest_streak,
         }));
       }
-    } catch (error) {
-      console.log('Failed to load mewing data');
+
+      // Load weekly history for the calendar
+      try {
+        const historyRes = await api.get('/mewing/history?days=7');
+        if (historyRes.data.data?.entries) {
+          const entries = historyRes.data.data.entries;
+          const today = new Date();
+          const dayOfWeek = today.getDay();
+          // Monday = 0, Tuesday = 1, ..., Sunday = 6
+          const mondayOffset = dayOfWeek === 0 ? 6 : dayOfWeek - 1;
+          const weekStart = new Date(today);
+          weekStart.setDate(today.getDate() - mondayOffset);
+          weekStart.setHours(0, 0, 0, 0);
+
+          const newWeeklyData = [false, false, false, false, false, false, false];
+          entries.forEach((entry: any) => {
+            const entryDate = new Date(entry.date);
+            entryDate.setHours(0, 0, 0, 0);
+            const diff = Math.floor((entryDate.getTime() - weekStart.getTime()) / (1000 * 60 * 60 * 24));
+            if (diff >= 0 && diff < 7 && entry.mewing_minutes > 0) {
+              newWeeklyData[diff] = true;
+            }
+          });
+          setWeeklyData(newWeeklyData);
+        }
+      } catch {
+        // Weekly data is optional, don't fail the whole screen
+      }
+    } catch (err) {
+      setError('Failed to load mewing data. Please try again.');
     }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadData();
+    setIsRefreshing(false);
   };
 
   const handleLogSession = async () => {
@@ -80,7 +118,7 @@ export default function MewingScreen() {
       loadData();
 
       Alert.alert('Session Logged!', `Great job! You logged ${mins} minutes of mewing.`);
-    } catch (error) {
+    } catch (err) {
       Alert.alert('Error', 'Failed to log session. Please try again.');
     }
   };
@@ -94,9 +132,37 @@ export default function MewingScreen() {
     ? Math.min((todayProgress.mewing_minutes / goal.daily_minutes_goal) * 100, 100)
     : 0;
 
+  if (error) {
+    return (
+      <SafeAreaView className="flex-1 bg-white items-center justify-center">
+        <Ionicons name="cloud-offline-outline" size={48} color="#ef4444" />
+        <Text className="text-red-500 mt-4 text-center px-8">{error}</Text>
+        <TouchableOpacity
+          onPress={() => {
+            hapticSelection();
+            loadData();
+          }}
+          className="mt-4 bg-blue-600 px-6 py-3 rounded-xl"
+        >
+          <Text className="text-white font-semibold">Retry</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#2563eb"
+          />
+        }
+      >
         {/* Header */}
         <View className="px-5 pt-5 pb-4">
           <Text className="text-2xl font-bold text-gray-900">Mewing Tracker</Text>
@@ -104,7 +170,7 @@ export default function MewingScreen() {
         </View>
 
         {/* Today's Progress Card */}
-        <View className="mx-5 bg-gradient-to-r bg-blue-50 rounded-2xl p-5 mb-4">
+        <View className="mx-5 bg-blue-50 rounded-2xl p-5 mb-4">
           <Text className="text-lg font-semibold text-gray-900 mb-4">Today's Progress</Text>
 
           {/* Progress Ring */}
@@ -123,7 +189,10 @@ export default function MewingScreen() {
 
           {/* Log Session Button */}
           <TouchableOpacity
-            onPress={() => setShowModal(true)}
+            onPress={() => {
+              hapticSelection();
+              setShowModal(true);
+            }}
             className="bg-blue-600 py-3 rounded-xl items-center"
             activeOpacity={0.8}
           >
@@ -132,7 +201,7 @@ export default function MewingScreen() {
         </View>
 
         {/* Streak Card */}
-        <View className="mx-5 flex-row space-x-3 mb-4">
+        <View className="mx-5 flex-row gap-3 mb-4">
           <View className="flex-1 bg-orange-50 rounded-xl p-4 items-center">
             <Ionicons name="flame" size={28} color="#f97316" />
             <Text className="text-2xl font-bold text-gray-900 mt-1">{goal.current_streak}</Text>
@@ -225,11 +294,11 @@ export default function MewingScreen() {
             </View>
             {expandedSection === 'mistakes' && (
               <Text className="text-sm text-gray-600 mt-3">
-                • Only pressing the tip of the tongue (need the whole tongue){'\n'}
-                • Pushing too hard (should be light, sustained pressure){'\n'}
-                • Mouth breathing instead of nasal breathing{'\n'}
-                • Clenching jaw or teeth too tightly{'\n'}
-                • Inconsistent practice
+                {'\u2022'} Only pressing the tip of the tongue (need the whole tongue){'\n'}
+                {'\u2022'} Pushing too hard (should be light, sustained pressure){'\n'}
+                {'\u2022'} Mouth breathing instead of nasal breathing{'\n'}
+                {'\u2022'} Clenching jaw or teeth too tightly{'\n'}
+                {'\u2022'} Inconsistent practice
               </Text>
             )}
           </TouchableOpacity>
@@ -250,10 +319,10 @@ export default function MewingScreen() {
             {expandedSection === 'results' && (
               <Text className="text-sm text-gray-600 mt-3">
                 Timeline varies by age and consistency:{'\n'}
-                • 1-3 months: Improved nasal breathing, better posture awareness{'\n'}
-                • 3-6 months: Subtle changes in facial structure may appear{'\n'}
-                • 6-12 months: More noticeable improvements in jawline{'\n'}
-                • 1-2+ years: Significant changes possible, especially for younger individuals
+                {'\u2022'} 1-3 months: Improved nasal breathing, better posture awareness{'\n'}
+                {'\u2022'} 3-6 months: Subtle changes in facial structure may appear{'\n'}
+                {'\u2022'} 6-12 months: More noticeable improvements in jawline{'\n'}
+                {'\u2022'} 1-2+ years: Significant changes possible, especially for younger individuals
               </Text>
             )}
           </TouchableOpacity>

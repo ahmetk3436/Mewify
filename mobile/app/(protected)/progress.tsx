@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Dimensions } from 'react-native';
+import { View, Text, ScrollView, TouchableOpacity, Image, Modal, Dimensions, RefreshControl } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { Ionicons } from '@expo/vector-icons';
 import { useRouter } from 'expo-router';
@@ -20,7 +20,7 @@ interface CompareState {
   second: Analysis | null;
 }
 
-// Simple View-based line chart component
+// Simple View-based bar chart component
 const ScoreTrendChart = ({ data }: { data: { score: number; date: string }[] }) => {
   if (data.length === 0) {
     return (
@@ -58,6 +58,12 @@ const ScoreTrendChart = ({ data }: { data: { score: number; date: string }[] }) 
   );
 };
 
+const getScoreColor = (score: number) => {
+  if (score >= 8) return 'text-green-600';
+  if (score >= 6) return 'text-blue-600';
+  return 'text-amber-600';
+};
+
 export default function ProgressScreen() {
   const router = useRouter();
   const [analyses, setAnalyses] = useState<Analysis[]>([]);
@@ -65,6 +71,9 @@ export default function ProgressScreen() {
   const [compareMode, setCompareMode] = useState(false);
   const [compare, setCompare] = useState<CompareState>({ first: null, second: null });
   const [showCompareModal, setShowCompareModal] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     loadAnalyses();
@@ -72,6 +81,7 @@ export default function ProgressScreen() {
 
   const loadAnalyses = async () => {
     try {
+      setError(null);
       const response = await api.get('/analyses?limit=50');
       if (response.data.data?.analyses) {
         const analysesData = response.data.data.analyses;
@@ -84,9 +94,17 @@ export default function ProgressScreen() {
         })).reverse();
         setScoreHistory(history);
       }
-    } catch (error) {
-      console.log('Failed to load analyses');
+    } catch (err) {
+      setError('Failed to load your progress. Please try again.');
+    } finally {
+      setIsLoading(false);
     }
+  };
+
+  const handleRefresh = async () => {
+    setIsRefreshing(true);
+    await loadAnalyses();
+    setIsRefreshing(false);
   };
 
   const toggleCompareMode = () => {
@@ -109,6 +127,7 @@ export default function ProgressScreen() {
   };
 
   const handlePhotoPress = (analysis: Analysis) => {
+    hapticSelection();
     if (compareMode) {
       handleSelectForCompare(analysis);
     } else {
@@ -132,14 +151,60 @@ export default function ProgressScreen() {
     ? (compare.second.overall_score - compare.first.overall_score).toFixed(1)
     : '0';
 
+  if (isLoading) {
+    return (
+      <SafeAreaView className="flex-1 bg-white">
+        <View className="px-5 pt-5 pb-4">
+          <Text className="text-2xl font-bold text-gray-900">Your Progress</Text>
+          <Text className="text-base text-gray-500 mt-1">Track your glow-up journey</Text>
+        </View>
+        <View className="px-5 flex-row flex-wrap justify-between">
+          <View className="w-[48%] mb-3 rounded-xl bg-gray-200 aspect-square" />
+          <View className="w-[48%] mb-3 rounded-xl bg-gray-200 aspect-square" />
+          <View className="w-[48%] mb-3 rounded-xl bg-gray-200 aspect-square" />
+          <View className="w-[48%] mb-3 rounded-xl bg-gray-200 aspect-square" />
+        </View>
+      </SafeAreaView>
+    );
+  }
+
+  if (error) {
+    return (
+      <SafeAreaView className="flex-1 bg-white items-center justify-center">
+        <Ionicons name="cloud-offline-outline" size={48} color="#ef4444" />
+        <Text className="text-red-500 mt-4 text-center px-8">{error}</Text>
+        <TouchableOpacity
+          onPress={() => {
+            hapticSelection();
+            setIsLoading(true);
+            loadAnalyses();
+          }}
+          className="mt-4 bg-blue-600 px-6 py-3 rounded-xl"
+        >
+          <Text className="text-white font-semibold">Retry</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView className="flex-1 bg-white">
-      <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
+      <ScrollView
+        className="flex-1"
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={isRefreshing}
+            onRefresh={handleRefresh}
+            tintColor="#2563eb"
+          />
+        }
+      >
         {/* Header */}
         <View className="px-5 pt-5 pb-4 flex-row items-center justify-between">
           <View>
             <Text className="text-2xl font-bold text-gray-900">Your Progress</Text>
-            <Text className="text-base text-gray-500 mt-1">Track your glow-up journey</Text>
+            <Text className="text-base text-gray-500 mt-1">Track your glow-up journey over time</Text>
           </View>
           <TouchableOpacity
             onPress={toggleCompareMode}
@@ -161,7 +226,7 @@ export default function ProgressScreen() {
         {compareMode && (
           <View className="mx-5 bg-blue-50 rounded-xl p-4 mb-4">
             <Text className="text-sm text-blue-700">
-              <Ionicons name="information-circle" size={16} color="#1d4ed8" /> Select two photos to compare your progress side by side.
+              Select two photos to compare your progress side by side.
             </Text>
             {compare.first && !compare.second && (
               <Text className="text-sm text-blue-700 mt-2 font-medium">
@@ -181,8 +246,14 @@ export default function ProgressScreen() {
               <Text className="text-gray-500 mt-4 text-center">
                 Take your first scan to start{'\n'}tracking your progress
               </Text>
+              <Text className="text-gray-400 mt-1 text-sm text-center">
+                Track your glow-up journey over time
+              </Text>
               <TouchableOpacity
-                onPress={() => router.push('/(protected)/(tabs)')}
+                onPress={() => {
+                  hapticSelection();
+                  router.push('/(protected)/(tabs)');
+                }}
                 className="mt-4 bg-blue-600 px-6 py-3 rounded-xl"
               >
                 <Text className="text-white font-semibold">Take First Scan</Text>
@@ -219,7 +290,7 @@ export default function ProgressScreen() {
                   </View>
                   <View className="p-2 bg-white">
                     <View className="flex-row items-center justify-between">
-                      <Text className="text-lg font-bold text-gray-900">
+                      <Text className={`text-lg font-bold ${getScoreColor(analysis.overall_score)}`}>
                         {analysis.overall_score.toFixed(1)}
                       </Text>
                       <Text className="text-xs text-gray-500">

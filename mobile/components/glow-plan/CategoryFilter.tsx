@@ -1,6 +1,7 @@
 import React from 'react';
 import { View, ScrollView, TouchableOpacity, Text } from 'react-native';
 import { CategoryType } from '../../types/glow-plan';
+import { hapticSelection } from '../../lib/haptics';
 
 interface CategoryFilterProps {
   selectedCategory: CategoryType;
@@ -18,12 +19,15 @@ const CategoryFilter: React.FC<CategoryFilterProps> = ({
       horizontal
       showsHorizontalScrollIndicator={false}
       className="mb-4 pl-5"
-      contentContainerClassName="gap-2 pr-5"
+      contentContainerStyle={{ gap: 8, paddingRight: 20 }}
     >
       {categories.map((category) => (
         <TouchableOpacity
           key={category}
-          onPress={() => onSelectCategory(category)}
+          onPress={() => {
+            hapticSelection();
+            onSelectCategory(category);
+          }}
           className={`px-4 py-2 rounded-full ${
             selectedCategory === category ? 'bg-blue-600' : 'bg-gray-100'
           }`}

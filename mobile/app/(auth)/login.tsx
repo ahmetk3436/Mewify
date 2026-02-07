@@ -39,7 +39,7 @@ export default function LoginScreen() {
   const handleGuestMode = async () => {
     hapticSelection();
     await continueAsGuest();
-    router.replace('/(protected)/home');
+    router.replace('/(protected)/(tabs)');
   };
 
   return (

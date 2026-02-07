@@ -1,18 +1,33 @@
-import React, { useState } from 'react';
+import React, { useState, useMemo } from 'react';
 import { View, Text, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
-import { Link } from 'expo-router';
+import { Link, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
+import { hapticSelection } from '../../lib/haptics';
 
 export default function RegisterScreen() {
-  const { register } = useAuth();
+  const { register, continueAsGuest } = useAuth();
+  const router = useRouter();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+
+  const passwordStrength = useMemo(() => {
+    if (password.length === 0) return null;
+    if (password.length < 6) return { label: 'Weak', color: 'bg-red-500', textColor: 'text-red-500' };
+    if (password.length < 10) return { label: 'Medium', color: 'bg-amber-500', textColor: 'text-amber-500' };
+    const hasNumber = /\d/.test(password);
+    const hasSpecial = /[^a-zA-Z0-9]/.test(password);
+    const hasUpper = /[A-Z]/.test(password);
+    if (hasNumber && (hasSpecial || hasUpper)) {
+      return { label: 'Strong', color: 'bg-green-500', textColor: 'text-green-500' };
+    }
+    return { label: 'Medium', color: 'bg-amber-500', textColor: 'text-amber-500' };
+  }, [password]);
 
   const handleRegister = async () => {
     setError('');
@@ -42,6 +57,12 @@ export default function RegisterScreen() {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleGuestMode = async () => {
+    hapticSelection();
+    await continueAsGuest();
+    router.replace('/(protected)/(tabs)');
   };
 
   return (
@@ -76,7 +97,7 @@ export default function RegisterScreen() {
             />
           </View>
 
-          <View className="mb-4">
+          <View className="mb-2">
             <Input
               label="Password"
               placeholder="Min. 8 characters"
@@ -86,6 +107,24 @@ export default function RegisterScreen() {
               textContentType="newPassword"
             />
           </View>
+
+          {/* Password Strength Indicator */}
+          {passwordStrength && (
+            <View className="mb-4 flex-row items-center">
+              <View className="flex-1 h-1 rounded-full bg-gray-700 overflow-hidden">
+                <View
+                  className={`h-full rounded-full ${passwordStrength.color}`}
+                  style={{
+                    width: passwordStrength.label === 'Weak' ? '33%' :
+                           passwordStrength.label === 'Medium' ? '66%' : '100%',
+                  }}
+                />
+              </View>
+              <Text className={`ml-3 text-xs ${passwordStrength.textColor}`}>
+                {passwordStrength.label}
+              </Text>
+            </View>
+          )}
 
           <View className="mb-6">
             <Input
@@ -108,11 +147,22 @@ export default function RegisterScreen() {
           <View className="mt-6 flex-row items-center justify-center">
             <Text className="text-gray-400">Already have an account? </Text>
             <Link href="/(auth)/login" asChild>
-              <Pressable>
+              <Pressable onPress={() => hapticSelection()}>
                 <Text className="font-semibold text-blue-400">Sign In</Text>
               </Pressable>
             </Link>
           </View>
+
+          {/* Guest Mode */}
+          <Pressable
+            className="mt-6 items-center py-3"
+            onPress={handleGuestMode}
+          >
+            <Text className="text-base font-medium text-gray-500">
+              Skip for now
+            </Text>
+            <Text className="mt-1 text-xs text-gray-600">Try 3 free scans</Text>
+          </Pressable>
         </View>
       </KeyboardAvoidingView>
     </SafeAreaView>

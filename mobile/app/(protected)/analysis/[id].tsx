@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, ScrollView, Image, TouchableOpacity, ActivityIndicator } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useRouter, useLocalSearchParams } from 'expo-router';
@@ -7,8 +7,9 @@ import ScoreGrid from '../../../components/analysis/ScoreGrid';
 import StrengthsCard from '../../../components/analysis/StrengthsCard';
 import ImprovementsCard from '../../../components/analysis/ImprovementsCard';
 import ShareButton from '../../../components/analysis/ShareButton';
+import api from '../../../lib/api';
+import { hapticSelection, hapticSuccess } from '../../../lib/haptics';
 
-// Mock Data Interface
 interface AnalysisData {
   id: string;
   overallScore: number;
@@ -31,46 +32,71 @@ export default function AnalysisScreen() {
   const { id } = useLocalSearchParams<{ id: string }>();
   const [isLoading, setIsLoading] = useState(true);
   const [data, setData] = useState<AnalysisData | null>(null);
+  const [error, setError] = useState<string | null>(null);
 
-  // Mock Data Fetching Simulation
-  React.useEffect(() => {
-    // Simulate API call delay
-    const timer = setTimeout(() => {
+  const loadAnalysis = async () => {
+    setIsLoading(true);
+    setError(null);
+    try {
+      const response = await api.get(`/analyses/${id}`);
+      const analysis = response.data.data;
+
       setData({
-        id: id || '1',
-        overallScore: 8.4,
-        imageUri: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?auto=format&fit=crop&w=800&q=80',
+        id: analysis.id,
+        overallScore: analysis.overall_score || 0,
+        imageUri: analysis.image_url || '',
         scores: {
-          symmetry: 9,
-          jawline: 7,
-          skin: 8,
-          eyes: 9,
-          nose: 8,
-          lips: 7,
-          harmony: 9,
+          symmetry: analysis.symmetry_score || 0,
+          jawline: analysis.jawline_score || 0,
+          skin: analysis.skin_score || 0,
+          eyes: analysis.eye_score || 0,
+          nose: analysis.nose_score || 0,
+          lips: analysis.lips_score || 0,
+          harmony: analysis.harmony_score || 0,
         },
-        strengths: [
-          'Excellent facial symmetry and balance',
-          'Bright, clear eye area with good spacing',
-          'Strong jawline definition',
-        ],
-        improvements: [
-          'Hydration boost for skin texture',
-          'Contouring to enhance cheekbones',
-          'Lip volume enhancement',
-        ],
+        strengths: analysis.strengths || [],
+        improvements: analysis.improvements || [],
       });
+    } catch (err) {
+      setError('Failed to load analysis. Please try again.');
+    } finally {
       setIsLoading(false);
-    }, 800);
+    }
+  };
 
-    return () => clearTimeout(timer);
+  useEffect(() => {
+    loadAnalysis();
   }, [id]);
 
-  if (isLoading || !data) {
+  if (isLoading) {
     return (
-      <SafeAreaView className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator size="large" color="#2563eb" />
-        <Text className="mt-4 text-gray-500">Analyzing features...</Text>
+      <SafeAreaView className="flex-1 items-center justify-center bg-gray-950">
+        <ActivityIndicator size="large" color="#3b82f6" />
+        <Text className="mt-4 text-gray-400">Loading analysis...</Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (error || !data) {
+    return (
+      <SafeAreaView className="flex-1 items-center justify-center bg-gray-950">
+        <Ionicons name="cloud-offline-outline" size={48} color="#ef4444" />
+        <Text className="text-red-400 mt-4 text-center px-8">{error}</Text>
+        <TouchableOpacity
+          onPress={loadAnalysis}
+          className="bg-blue-600 px-6 py-3 rounded-xl mt-4"
+        >
+          <Text className="text-white font-semibold">Retry</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          onPress={() => {
+            hapticSelection();
+            router.back();
+          }}
+          className="mt-4"
+        >
+          <Text className="text-gray-400">Go Back</Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -78,19 +104,27 @@ export default function AnalysisScreen() {
   return (
     <SafeAreaView className="flex-1 bg-gray-50" edges={['top']}>
       <ScrollView className="flex-1" showsVerticalScrollIndicator={false}>
-        {/* Header */}
+        {/* Header with Image */}
         <View className="relative h-80 w-full bg-gray-200">
-          <Image
-            source={{ uri: data.imageUri }}
-            className="h-full w-full"
-            resizeMode="cover"
-          />
-          <View className="absolute inset-0 bg-gradient-to-b from-black/30 via-transparent to-black/60" />
-          
+          {data.imageUri ? (
+            <Image
+              source={{ uri: data.imageUri }}
+              className="h-full w-full"
+              resizeMode="cover"
+            />
+          ) : (
+            <View className="h-full w-full items-center justify-center bg-blue-900">
+              <Ionicons name="person" size={80} color="#60a5fa" />
+            </View>
+          )}
+
           {/* Back Button */}
           <TouchableOpacity
-            onPress={() => router.back()}
-            className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/20 backdrop-blur-sm"
+            onPress={() => {
+              hapticSelection();
+              router.back();
+            }}
+            className="absolute left-4 top-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/30"
           >
             <Ionicons name="arrow-back" size={24} color="white" />
           </TouchableOpacity>
@@ -102,7 +136,7 @@ export default function AnalysisScreen() {
             </Text>
             <View className="mt-1 flex-row items-baseline">
               <Text className="text-6xl font-bold text-white">
-                {data.overallScore}
+                {data.overallScore.toFixed(1)}
               </Text>
               <Text className="ml-2 text-2xl font-medium text-white/80">/10</Text>
             </View>
@@ -111,7 +145,6 @@ export default function AnalysisScreen() {
 
         {/* Content Container */}
         <View className="-mt-4 rounded-t-3xl bg-gray-50 px-6 pb-24 pt-8">
-          
           {/* Score Grid Section */}
           <View className="mb-8">
             <Text className="mb-4 text-xl font-bold text-gray-900">
@@ -121,30 +154,34 @@ export default function AnalysisScreen() {
           </View>
 
           {/* Strengths Section */}
-          <View className="mb-8">
-            <View className="mb-4 flex-row items-center">
-              <View className="mr-2 h-6 w-1 rounded-full bg-green-500" />
-              <Text className="text-xl font-bold text-gray-900">Your Strengths</Text>
+          {data.strengths.length > 0 && (
+            <View className="mb-8">
+              <View className="mb-4 flex-row items-center">
+                <View className="mr-2 h-6 w-1 rounded-full bg-green-500" />
+                <Text className="text-xl font-bold text-gray-900">Your Strengths</Text>
+              </View>
+              <View className="gap-3">
+                {data.strengths.map((strength, index) => (
+                  <StrengthsCard key={index} text={strength} />
+                ))}
+              </View>
             </View>
-            <View className="space-y-3">
-              {data.strengths.map((strength, index) => (
-                <StrengthsCard key={index} text={strength} />
-              ))}
-            </View>
-          </View>
+          )}
 
           {/* Improvements Section */}
-          <View className="mb-8">
-            <View className="mb-4 flex-row items-center">
-              <View className="mr-2 h-6 w-1 rounded-full bg-amber-500" />
-              <Text className="text-xl font-bold text-gray-900">Room to Grow</Text>
+          {data.improvements.length > 0 && (
+            <View className="mb-8">
+              <View className="mb-4 flex-row items-center">
+                <View className="mr-2 h-6 w-1 rounded-full bg-amber-500" />
+                <Text className="text-xl font-bold text-gray-900">Room to Grow</Text>
+              </View>
+              <View className="gap-3">
+                {data.improvements.map((improvement, index) => (
+                  <ImprovementsCard key={index} text={improvement} />
+                ))}
+              </View>
             </View>
-            <View className="space-y-3">
-              {data.improvements.map((improvement, index) => (
-                <ImprovementsCard key={index} text={improvement} />
-              ))}
-            </View>
-          </View>
+          )}
 
           {/* Share Section */}
           <View className="mb-8">
@@ -156,14 +193,20 @@ export default function AnalysisScreen() {
       {/* Bottom Action Buttons */}
       <View className="absolute bottom-0 left-0 right-0 border-t border-gray-200 bg-white px-6 pb-8 pt-4 shadow-lg">
         <TouchableOpacity
-          onPress={() => router.push('/(protected)/plan')} // Assuming plan route exists or will be created
-          className="mb-3 items-center rounded-xl bg-blue-600 px-6 py-4 shadow-md active:bg-blue-700"
+          onPress={() => {
+            hapticSelection();
+            router.push('/(protected)/glow-plan');
+          }}
+          className="mb-3 items-center rounded-xl bg-blue-600 px-6 py-4 shadow-md"
         >
           <Text className="text-base font-bold text-white">View Your Glow Plan</Text>
         </TouchableOpacity>
-        
+
         <TouchableOpacity
-          onPress={() => router.push('/(protected)/scan')}
+          onPress={() => {
+            hapticSelection();
+            router.push('/(protected)/(tabs)');
+          }}
           className="flex-row items-center justify-center"
         >
           <Ionicons name="camera-outline" size={20} color="#6b7280" />
