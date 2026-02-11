@@ -116,6 +116,15 @@ type glowPlanAIRecommendation struct {
 }
 
 func (s *GlowPlanService) generateAIRecommendations(userID, analysisID uuid.UUID, analysis *models.FaceAnalysis) ([]models.GlowPlan, error) {
+	if llmPlans, err := s.generateLLMRecommendations(userID, analysisID, analysis); err == nil && len(llmPlans) > 0 {
+		return llmPlans, nil
+	}
+
+	// Fallback keeps core flow functional even if upstream LLM provider is unavailable.
+	return s.generateDeterministicRecommendations(userID, analysisID, analysis), nil
+}
+
+func (s *GlowPlanService) generateLLMRecommendations(userID, analysisID uuid.UUID, analysis *models.FaceAnalysis) ([]models.GlowPlan, error) {
 	strengthsList := strings.Join(analysis.Strengths, ", ")
 	improvementsList := strings.Join(analysis.Improvements, ", ")
 
@@ -132,73 +141,122 @@ func (s *GlowPlanService) generateAIRecommendations(userID, analysisID uuid.UUID
 		improvementsList,
 	)
 
-	reqBody := openAIRequest{
-		Model: s.cfg.OpenAIModel,
-		Messages: []openAIMessage{
-			{
-				Role:    "system",
-				Content: "You are a personalized beauty and self-improvement advisor. You provide actionable, specific recommendations based on facial analysis data. Always respond with ONLY valid JSON, no markdown, no code fences, no explanation text.",
+	providers := []struct {
+		url   string
+		key   string
+		model string
+	}{
+		{url: strings.TrimSpace(s.cfg.GLMAPIURL), key: strings.TrimSpace(s.cfg.GLMAPIKey), model: strings.TrimSpace(s.cfg.GLMModel)},
+		{url: strings.TrimSpace(s.cfg.DeepSeekAPIURL), key: strings.TrimSpace(s.cfg.DeepSeekAPIKey), model: strings.TrimSpace(s.cfg.DeepSeekModel)},
+	}
+
+	timeout := s.cfg.LLMTimeout
+	if timeout <= 0 {
+		timeout = 20 * time.Second
+	}
+
+	var lastErr error
+	for _, p := range providers {
+		if p.url == "" || p.key == "" || p.model == "" {
+			continue
+		}
+
+		reqBody := openAIRequest{
+			Model: p.model,
+			Messages: []openAIMessage{
+				{
+					Role:    "system",
+					Content: "You are a personalized beauty and self-improvement advisor. Always return valid JSON only.",
+				},
+				{
+					Role:    "user",
+					Content: prompt,
+				},
 			},
-			{
-				Role:    "user",
-				Content: prompt,
-			},
-		},
-		MaxTokens: 2000,
+			MaxTokens:      2000,
+			Temperature:    0.2,
+			ResponseFormat: map[string]string{"type": "json_object"},
+		}
+
+		jsonBody, err := json.Marshal(reqBody)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		client := &http.Client{Timeout: timeout}
+		httpReq, err := http.NewRequest("POST", p.url, bytes.NewReader(jsonBody))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		httpReq.Header.Set("Content-Type", "application/json")
+		httpReq.Header.Set("Authorization", "Bearer "+p.key)
+
+		resp, err := client.Do(httpReq)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+
+		body, readErr := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if readErr != nil {
+			lastErr = readErr
+			continue
+		}
+		if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+			lastErr = fmt.Errorf("provider status=%d", resp.StatusCode)
+			continue
+		}
+
+		var llmResp openAIResponse
+		if err := json.Unmarshal(body, &llmResp); err != nil {
+			lastErr = err
+			continue
+		}
+		if len(llmResp.Choices) == 0 {
+			lastErr = errors.New("empty llm choices")
+			continue
+		}
+
+		content := strings.TrimSpace(llmResp.Choices[0].Message.Content)
+		content = strings.TrimPrefix(content, "```json")
+		content = strings.TrimPrefix(content, "```")
+		content = strings.TrimSuffix(content, "```")
+		content = strings.TrimSpace(content)
+
+		var aiRecs []glowPlanAIRecommendation
+		if err := json.Unmarshal([]byte(content), &aiRecs); err != nil {
+			start := strings.Index(content, "[")
+			end := strings.LastIndex(content, "]")
+			if start >= 0 && end > start {
+				if nestedErr := json.Unmarshal([]byte(content[start:end+1]), &aiRecs); nestedErr != nil {
+					lastErr = nestedErr
+					continue
+				}
+			} else {
+				lastErr = err
+				continue
+			}
+		}
+
+		plans := convertGlowPlanRecommendations(userID, analysisID, aiRecs)
+		if len(plans) > 0 {
+			return plans, nil
+		}
+		lastErr = errors.New("empty recommendations")
 	}
 
-	jsonBody, err := json.Marshal(reqBody)
-	if err != nil {
-		return nil, fmt.Errorf("failed to marshal openai request: %w", err)
+	if lastErr != nil {
+		return nil, lastErr
 	}
+	return nil, errors.New("no llm provider configured")
+}
 
-	client := &http.Client{Timeout: 30 * time.Second}
-	httpReq, err := http.NewRequest("POST", "https://api.openai.com/v1/chat/completions", bytes.NewReader(jsonBody))
-	if err != nil {
-		return nil, fmt.Errorf("failed to create http request: %w", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Authorization", "Bearer "+s.cfg.OpenAIAPIKey)
-
-	resp, err := client.Do(httpReq)
-	if err != nil {
-		return nil, fmt.Errorf("openai api request failed: %w", err)
-	}
-	defer resp.Body.Close()
-
-	body, err := io.ReadAll(resp.Body)
-	if err != nil {
-		return nil, fmt.Errorf("failed to read openai response: %w", err)
-	}
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("openai api returned status %d: %s", resp.StatusCode, string(body))
-	}
-
-	var openAIResp openAIResponse
-	if err := json.Unmarshal(body, &openAIResp); err != nil {
-		return nil, fmt.Errorf("failed to parse openai response: %w", err)
-	}
-
-	if len(openAIResp.Choices) == 0 {
-		return nil, fmt.Errorf("openai returned no choices")
-	}
-
-	content := strings.TrimSpace(openAIResp.Choices[0].Message.Content)
-	// Strip markdown code fences if present (defensive)
-	content = strings.TrimPrefix(content, "```json")
-	content = strings.TrimPrefix(content, "```")
-	content = strings.TrimSuffix(content, "```")
-	content = strings.TrimSpace(content)
-
-	var aiRecs []glowPlanAIRecommendation
-	if err := json.Unmarshal([]byte(content), &aiRecs); err != nil {
-		return nil, fmt.Errorf("failed to parse ai recommendations: %w", err)
-	}
-
-	var recommendations []models.GlowPlan
-	for _, rec := range aiRecs {
-		// Validate and clamp values to match database constraints
+func convertGlowPlanRecommendations(userID, analysisID uuid.UUID, recs []glowPlanAIRecommendation) []models.GlowPlan {
+	plans := make([]models.GlowPlan, 0, len(recs))
+	for _, rec := range recs {
 		category := rec.Category
 		if category != "jawline" && category != "skin" && category != "style" && category != "fitness" && category != "grooming" {
 			category = "grooming"
@@ -222,19 +280,94 @@ func (s *GlowPlanService) generateAIRecommendations(userID, analysisID uuid.UUID
 			timeframe = 12
 		}
 
-		plan := models.GlowPlan{
+		title := strings.TrimSpace(rec.Title)
+		if title == "" {
+			title = "Personalized improvement step"
+		}
+		description := strings.TrimSpace(rec.Description)
+		if description == "" {
+			description = "Focus on this area consistently and review your progress weekly."
+		}
+
+		plans = append(plans, models.GlowPlan{
 			UserID:         userID,
 			AnalysisID:     analysisID,
 			Category:       category,
-			Title:          rec.Title,
-			Description:    rec.Description,
+			Title:          title,
+			Description:    description,
 			Priority:       priority,
 			Difficulty:     difficulty,
 			TimeframeWeeks: timeframe,
 			IsCompleted:    false,
-		}
-		recommendations = append(recommendations, plan)
+		})
+	}
+	return plans
+}
+
+func (s *GlowPlanService) generateDeterministicRecommendations(userID, analysisID uuid.UUID, analysis *models.FaceAnalysis) []models.GlowPlan {
+	plans := []models.GlowPlan{
+		{
+			UserID:         userID,
+			AnalysisID:     analysisID,
+			Category:       "jawline",
+			Title:          "Daily neck posture routine",
+			Description:    "Spend 10 minutes on neck posture and tongue placement exercises each day. Track consistency for visible structural improvement over time.",
+			Priority:       5,
+			Difficulty:     "medium",
+			TimeframeWeeks: 8,
+			IsCompleted:    false,
+		},
+		{
+			UserID:         userID,
+			AnalysisID:     analysisID,
+			Category:       "skin",
+			Title:          "Simple AM/PM skin protocol",
+			Description:    "Use a minimal cleanser-moisturizer-sunscreen stack in the morning and cleanse-moisturize at night. Keep it consistent before adding actives.",
+			Priority:       5,
+			Difficulty:     "easy",
+			TimeframeWeeks: 6,
+			IsCompleted:    false,
+		},
+		{
+			UserID:         userID,
+			AnalysisID:     analysisID,
+			Category:       "fitness",
+			Title:          "Sleep and hydration baseline",
+			Description:    "Target 7-8 hours of sleep and 2-2.5L daily water intake. Improved recovery directly supports skin quality and facial definition.",
+			Priority:       4,
+			Difficulty:     "easy",
+			TimeframeWeeks: 4,
+			IsCompleted:    false,
+		},
+		{
+			UserID:         userID,
+			AnalysisID:     analysisID,
+			Category:       "grooming",
+			Title:          "Weekly grooming calibration",
+			Description:    "Refine eyebrow shape, maintain consistent beard or clean-shave lines, and keep haircut edges fresh. Small grooming details compound visual impact.",
+			Priority:       3,
+			Difficulty:     "easy",
+			TimeframeWeeks: 4,
+			IsCompleted:    false,
+		},
+		{
+			UserID:         userID,
+			AnalysisID:     analysisID,
+			Category:       "style",
+			Title:          "Lighting and photo angle routine",
+			Description:    "Practice front-facing natural light photos and a slight above-eye camera angle. Use one repeatable setup to track facial progress reliably.",
+			Priority:       3,
+			Difficulty:     "easy",
+			TimeframeWeeks: 3,
+			IsCompleted:    false,
+		},
 	}
 
-	return recommendations, nil
+	// Slightly boost skin or jawline priority based on lower score.
+	if analysis.SkinScore < analysis.JawlineScore {
+		plans[1].Priority = 5
+		plans[0].Priority = 4
+	}
+
+	return plans
 }
