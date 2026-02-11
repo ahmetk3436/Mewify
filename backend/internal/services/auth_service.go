@@ -1,22 +1,29 @@
 package services
 
 import (
+	"context"
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"strings"
 	"time"
 
 	"github.com/ahmetcoskunkizilkaya/mewify/backend/internal/config"
+	"github.com/ahmetcoskunkizilkaya/mewify/backend/internal/dto"
 	"github.com/ahmetcoskunkizilkaya/mewify/backend/internal/models"
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
 	"gorm.io/gorm"
+)
+
+var (
+	ErrEmailTaken         = errors.New("email already registered")
+	ErrInvalidCredentials = errors.New("invalid email or password")
+	ErrInvalidToken       = errors.New("invalid or expired refresh token")
+	ErrUserNotFound       = errors.New("user not found")
 )
 
 type AuthService struct {
@@ -28,204 +35,248 @@ func NewAuthService(db *gorm.DB, cfg *config.Config) *AuthService {
 	return &AuthService{db: db, cfg: cfg}
 }
 
-// generateJWT creates a new JWT token for the user
-func (s *AuthService) generateJWT(userID uuid.UUID) (string, error) {
+func (s *AuthService) Register(req *dto.RegisterRequest) (*dto.AuthResponse, error) {
+	if len(req.Email) == 0 || len(req.Password) < 8 {
+		return nil, errors.New("email required and password must be at least 8 characters")
+	}
+
+	var existing models.User
+	if err := s.db.Where("email = ?", req.Email).First(&existing).Error; err == nil {
+		return nil, ErrEmailTaken
+	}
+
+	hash, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	user := models.User{
+		ID:       uuid.New(),
+		Email:    req.Email,
+		Password: string(hash),
+	}
+
+	if err := s.db.Create(&user).Error; err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	return s.generateTokenPair(&user)
+}
+
+func (s *AuthService) Login(req *dto.LoginRequest) (*dto.AuthResponse, error) {
+	var user models.User
+	if err := s.db.Where("email = ?", req.Email).First(&user).Error; err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
+		return nil, ErrInvalidCredentials
+	}
+
+	return s.generateTokenPair(&user)
+}
+
+func (s *AuthService) Refresh(req *dto.RefreshRequest) (*dto.AuthResponse, error) {
+	tokenHash := hashToken(req.RefreshToken)
+
+	var stored models.RefreshToken
+	if err := s.db.Where("token_hash = ? AND revoked = false", tokenHash).First(&stored).Error; err != nil {
+		return nil, ErrInvalidToken
+	}
+
+	if time.Now().After(stored.ExpiresAt) {
+		s.db.Model(&stored).Update("revoked", true)
+		return nil, ErrInvalidToken
+	}
+
+	// Revoke old token (rotation)
+	s.db.Model(&stored).Update("revoked", true)
+
+	var user models.User
+	if err := s.db.First(&user, "id = ?", stored.UserID).Error; err != nil {
+		return nil, fmt.Errorf("user not found: %w", err)
+	}
+
+	return s.generateTokenPair(&user)
+}
+
+func (s *AuthService) Logout(req *dto.LogoutRequest) error {
+	tokenHash := hashToken(req.RefreshToken)
+	return s.db.Model(&models.RefreshToken{}).
+		Where("token_hash = ?", tokenHash).
+		Update("revoked", true).Error
+}
+
+// DeleteAccount implements Apple Guideline 5.1.1(v) - account deletion.
+// Scrubs all user data: tokens, subscriptions, reports, blocks, then soft-deletes user.
+func (s *AuthService) DeleteAccount(userID uuid.UUID, password string) error {
+	var user models.User
+	if err := s.db.First(&user, "id = ?", userID).Error; err != nil {
+		return ErrUserNotFound
+	}
+
+	// Verify password (skip for Apple Sign-In users who have no password)
+	if user.Password != "" {
+		if strings.TrimSpace(password) == "" {
+			return ErrInvalidCredentials
+		}
+		if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
+			return ErrInvalidCredentials
+		}
+	}
+
+	// Scrub all associated data in a transaction
+	return s.db.Transaction(func(tx *gorm.DB) error {
+		// Revoke all refresh tokens
+		tx.Where("user_id = ?", userID).Delete(&models.RefreshToken{})
+
+		// Remove subscriptions
+		tx.Where("user_id = ?", userID).Delete(&models.Subscription{})
+
+		// Remove reports filed by user
+		tx.Where("reporter_id = ?", userID).Delete(&models.Report{})
+
+		// Remove blocks
+		tx.Where("blocker_id = ? OR blocked_id = ?", userID, userID).Delete(&models.Block{})
+
+		// Soft-delete the user (GORM DeletedAt)
+		return tx.Delete(&user).Error
+	})
+}
+
+// AppleSignIn handles Sign in with Apple (Guideline 4.8).
+// Verifies Apple identity token and creates/finds a user.
+func (s *AuthService) AppleSignIn(req *dto.AppleSignInRequest) (*dto.AuthResponse, error) {
+	identityToken := strings.TrimSpace(req.IdentityToken)
+	if identityToken == "" {
+		identityToken = strings.TrimSpace(req.IdentityTokenLegacy)
+	}
+	if identityToken == "" {
+		return nil, errors.New("identity token is required")
+	}
+
+	allowedAudiences := splitCSV(s.cfg.AppleClientIDs)
+	claims, err := verifyAppleIdentityToken(context.Background(), identityToken, allowedAudiences)
+	if err != nil {
+		return nil, err
+	}
+
+	sub, _ := claims["sub"].(string)
+	if sub == "" {
+		return nil, errors.New("Apple token missing subject")
+	}
+
+	// Use email from token, or from the request (first sign-in only)
+	email, _ := claims["email"].(string)
+	if email == "" {
+		email = req.Email
+	}
+	if email == "" {
+		email = sub + "@privaterelay.appleid.com"
+	}
+
+	var user models.User
+	err = s.db.Where("apple_sub = ?", sub).First(&user).Error
+	if errors.Is(err, gorm.ErrRecordNotFound) {
+		// If the user previously registered with email+password, link their AppleSub on first Apple login.
+		if err := s.db.Where("email = ?", email).First(&user).Error; err == nil {
+			if user.AppleSub == nil || strings.TrimSpace(*user.AppleSub) == "" {
+				subCopy := sub
+				user.AppleSub = &subCopy
+				if err := s.db.Save(&user).Error; err != nil {
+					return nil, fmt.Errorf("failed to link Apple user: %w", err)
+				}
+			}
+		} else if errors.Is(err, gorm.ErrRecordNotFound) {
+			subCopy := sub
+			user = models.User{
+				ID:       uuid.New(),
+				Email:    email,
+				AppleSub: &subCopy,
+				Password: "", // Apple users have no password
+			}
+			if err := s.db.Create(&user).Error; err != nil {
+				return nil, fmt.Errorf("failed to create Apple user: %w", err)
+			}
+		} else {
+			return nil, fmt.Errorf("failed to lookup user by email: %w", err)
+		}
+	} else if err != nil {
+		return nil, fmt.Errorf("failed to lookup user by apple_sub: %w", err)
+	}
+
+	return s.generateTokenPair(&user)
+}
+
+func splitCSV(csv string) []string {
+	parts := strings.Split(csv, ",")
+	out := make([]string, 0, len(parts))
+	for _, p := range parts {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
+}
+
+func (s *AuthService) generateTokenPair(user *models.User) (*dto.AuthResponse, error) {
+	accessToken, err := s.generateAccessToken(user)
+	if err != nil {
+		return nil, err
+	}
+
+	refreshToken, err := s.generateRefreshToken(user)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.AuthResponse{
+		AccessToken:  accessToken,
+		RefreshToken: refreshToken,
+		User: dto.UserResponse{
+			ID:    user.ID,
+			Email: user.Email,
+		},
+	}, nil
+}
+
+func (s *AuthService) generateAccessToken(user *models.User) (string, error) {
 	claims := jwt.MapClaims{
-		"sub": userID.String(),
-		"exp": time.Now().Add(s.cfg.JWTAccessExpiry).Unix(),
+		"sub":   user.ID.String(),
+		"email": user.Email,
+		"iat":   time.Now().Unix(),
+		"exp":   time.Now().Add(s.cfg.JWTAccessExpiry).Unix(),
 	}
 
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
 	return token.SignedString([]byte(s.cfg.JWTSecret))
 }
 
-// generateRefreshToken creates a new refresh token, stores its hash in DB, and returns the raw token
-func (s *AuthService) generateRefreshToken(userID uuid.UUID) (string, error) {
-	b := make([]byte, 64)
-	if _, err := rand.Read(b); err != nil {
-		return "", fmt.Errorf("failed to generate refresh token: %w", err)
+func (s *AuthService) generateRefreshToken(user *models.User) (string, error) {
+	rawBytes := make([]byte, 32)
+	if _, err := rand.Read(rawBytes); err != nil {
+		return "", fmt.Errorf("failed to generate random bytes: %w", err)
 	}
 
-	rawToken := hex.EncodeToString(b)
+	rawToken := base64.URLEncoding.EncodeToString(rawBytes)
+	tokenHash := hashToken(rawToken)
 
-	hash := sha256.Sum256([]byte(rawToken))
-	tokenHash := hex.EncodeToString(hash[:])
-
-	rt := models.RefreshToken{
+	record := models.RefreshToken{
 		ID:        uuid.New(),
-		UserID:    userID,
+		UserID:    user.ID,
 		TokenHash: tokenHash,
 		ExpiresAt: time.Now().Add(s.cfg.JWTRefreshExpiry),
-		Revoked:   false,
 	}
-	if err := s.db.Create(&rt).Error; err != nil {
+
+	if err := s.db.Create(&record).Error; err != nil {
 		return "", fmt.Errorf("failed to store refresh token: %w", err)
 	}
 
 	return rawToken, nil
 }
 
-// Register creates a new user
-func (s *AuthService) Register(email, password string) (*models.User, string, string, error) {
-	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	user := models.User{
-		ID:       uuid.New(),
-		Email:    email,
-		Password: string(hashedPassword),
-	}
-
-	if err := s.db.Create(&user).Error; err != nil {
-		return nil, "", "", err
-	}
-
-	accessToken, err := s.generateJWT(user.ID)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	refreshToken, err := s.generateRefreshToken(user.ID)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	return &user, accessToken, refreshToken, nil
-}
-
-// Login authenticates a user
-func (s *AuthService) Login(email, password string) (*models.User, string, string, error) {
-	var user models.User
-	if err := s.db.Where("email = ?", email).First(&user).Error; err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return nil, "", "", errors.New("invalid credentials")
-		}
-		return nil, "", "", err
-	}
-
-	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password)); err != nil {
-		return nil, "", "", errors.New("invalid credentials")
-	}
-
-	accessToken, err := s.generateJWT(user.ID)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	refreshToken, err := s.generateRefreshToken(user.ID)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	return &user, accessToken, refreshToken, nil
-}
-
-// RefreshToken validates a refresh token and returns a new access token
-func (s *AuthService) RefreshToken(refreshTokenStr string) (string, error) {
-	hash := sha256.Sum256([]byte(refreshTokenStr))
-	tokenHash := hex.EncodeToString(hash[:])
-
-	var rt models.RefreshToken
-	err := s.db.Where("token_hash = ? AND revoked = ? AND expires_at > ?", tokenHash, false, time.Now()).First(&rt).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			return "", errors.New("invalid or expired refresh token")
-		}
-		return "", fmt.Errorf("failed to query refresh token: %w", err)
-	}
-
-	accessToken, err := s.generateJWT(rt.UserID)
-	if err != nil {
-		return "", err
-	}
-
-	return accessToken, nil
-}
-
-// Logout revokes a refresh token
-func (s *AuthService) Logout(refreshTokenStr string) error {
-	hash := sha256.Sum256([]byte(refreshTokenStr))
-	tokenHash := hex.EncodeToString(hash[:])
-
-	result := s.db.Model(&models.RefreshToken{}).Where("token_hash = ?", tokenHash).Update("revoked", true)
-	if result.Error != nil {
-		return fmt.Errorf("failed to revoke refresh token: %w", result.Error)
-	}
-
-	return nil
-}
-
-// AppleSignIn handles Sign in with Apple (Guideline 4.8)
-func (s *AuthService) AppleSignIn(identityToken string) (*models.User, string, string, error) {
-	parts := strings.Split(identityToken, ".")
-	if len(parts) != 3 {
-		return nil, "", "", errors.New("invalid identity token format")
-	}
-
-	payload, err := base64.RawURLEncoding.DecodeString(parts[1])
-	if err != nil {
-		return nil, "", "", fmt.Errorf("failed to decode identity token payload: %w", err)
-	}
-
-	var claims struct {
-		Sub   string `json:"sub"`
-		Email string `json:"email"`
-	}
-	if err := json.Unmarshal(payload, &claims); err != nil {
-		return nil, "", "", fmt.Errorf("failed to parse identity token claims: %w", err)
-	}
-
-	if claims.Sub == "" {
-		return nil, "", "", errors.New("missing sub claim in identity token")
-	}
-
-	email := claims.Email
-	if email == "" {
-		email = "apple_" + claims.Sub + "@privaterelay.appleid.com"
-	}
-
-	var user models.User
-	err = s.db.Where("email = ?", email).First(&user).Error
-	if err != nil {
-		if errors.Is(err, gorm.ErrRecordNotFound) {
-			user = models.User{
-				ID:    uuid.New(),
-				Email: email,
-			}
-			if err := s.db.Create(&user).Error; err != nil {
-				return nil, "", "", fmt.Errorf("failed to create apple user: %w", err)
-			}
-		} else {
-			return nil, "", "", err
-		}
-	}
-
-	accessToken, err := s.generateJWT(user.ID)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	refreshToken, err := s.generateRefreshToken(user.ID)
-	if err != nil {
-		return nil, "", "", err
-	}
-
-	return &user, accessToken, refreshToken, nil
-}
-
-// DeleteAccount handles account deletion (Guideline 5.1.1)
-func (s *AuthService) DeleteAccount(userID uuid.UUID) error {
-	// 1. Delete associated refresh tokens
-	if err := s.db.Where("user_id = ?", userID).Delete(&models.RefreshToken{}).Error; err != nil {
-		return fmt.Errorf("failed to delete refresh tokens: %w", err)
-	}
-
-	// 2. Soft delete the user (GORM default behavior with DeletedAt)
-	if err := s.db.Delete(&models.User{}, userID).Error; err != nil {
-		return fmt.Errorf("failed to delete user: %w", err)
-	}
-
-	return nil
+func hashToken(token string) string {
+	h := sha256.Sum256([]byte(token))
+	return fmt.Sprintf("%x", h)
 }

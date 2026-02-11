@@ -1,158 +1,168 @@
 package handlers
 
 import (
+	"errors"
+
 	"github.com/ahmetcoskunkizilkaya/mewify/backend/internal/dto"
 	"github.com/ahmetcoskunkizilkaya/mewify/backend/internal/services"
 	"github.com/gofiber/fiber/v2"
-	"github.com/golang-jwt/jwt/v5"
-	"github.com/google/uuid"
 )
 
 type AuthHandler struct {
-	service *services.AuthService
+	authService *services.AuthService
 }
 
-func NewAuthHandler(service *services.AuthService) *AuthHandler {
-	return &AuthHandler{service: service}
+func NewAuthHandler(authService *services.AuthService) *AuthHandler {
+	return &AuthHandler{authService: authService}
 }
 
-// Register handles user registration
 func (h *AuthHandler) Register(c *fiber.Ctx) error {
 	var req dto.RegisterRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
+		return c.Status(fiber.StatusBadRequest).JSON(dto.ErrorResponse{
+			Error:   true,
+			Message: "Invalid request body",
+		})
 	}
 
-	user, accessToken, refreshToken, err := h.service.Register(req.Email, req.Password)
+	resp, err := h.authService.Register(&req)
 	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to register user"})
+		if errors.Is(err, services.ErrEmailTaken) {
+			return c.Status(fiber.StatusConflict).JSON(dto.ErrorResponse{
+				Error:   true,
+				Message: err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusBadRequest).JSON(dto.ErrorResponse{
+			Error:   true,
+			Message: err.Error(),
+		})
 	}
 
-	return c.Status(fiber.StatusCreated).JSON(fiber.Map{
-		"error":         false,
-		"message":       "User registered successfully",
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
-		"user":          user,
-	})
+	return c.Status(fiber.StatusCreated).JSON(resp)
 }
 
-// Login handles user login
 func (h *AuthHandler) Login(c *fiber.Ctx) error {
 	var req dto.LoginRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
+		return c.Status(fiber.StatusBadRequest).JSON(dto.ErrorResponse{
+			Error:   true,
+			Message: "Invalid request body",
+		})
 	}
 
-	user, accessToken, refreshToken, err := h.service.Login(req.Email, req.Password)
+	resp, err := h.authService.Login(&req)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Invalid credentials"})
+		if errors.Is(err, services.ErrInvalidCredentials) {
+			return c.Status(fiber.StatusUnauthorized).JSON(dto.ErrorResponse{
+				Error:   true,
+				Message: err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.ErrorResponse{
+			Error:   true,
+			Message: "Internal server error",
+		})
 	}
 
-	return c.JSON(fiber.Map{
-		"error":         false,
-		"message":       "Login successful",
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
-		"user":          user,
-	})
+	return c.JSON(resp)
 }
 
-// Refresh handles token refresh
 func (h *AuthHandler) Refresh(c *fiber.Ctx) error {
-	var req dto.RefreshTokenRequest
+	var req dto.RefreshRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
+		return c.Status(fiber.StatusBadRequest).JSON(dto.ErrorResponse{
+			Error:   true,
+			Message: "Invalid request body",
+		})
 	}
 
-	if req.RefreshToken == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Refresh token is required"})
-	}
-
-	accessToken, err := h.service.RefreshToken(req.RefreshToken)
+	resp, err := h.authService.Refresh(&req)
 	if err != nil {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Invalid or expired refresh token"})
+		if errors.Is(err, services.ErrInvalidToken) {
+			return c.Status(fiber.StatusUnauthorized).JSON(dto.ErrorResponse{
+				Error:   true,
+				Message: err.Error(),
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.ErrorResponse{
+			Error:   true,
+			Message: "Internal server error",
+		})
 	}
 
-	return c.JSON(fiber.Map{
-		"error":         false,
-		"message":       "Token refreshed successfully",
-		"access_token":  accessToken,
-		"refresh_token": req.RefreshToken,
-	})
+	return c.JSON(resp)
 }
 
-// AppleSignIn handles Sign in with Apple (Guideline 4.8)
-func (h *AuthHandler) AppleSignIn(c *fiber.Ctx) error {
-	var req dto.AppleSignInRequest
-	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
-	}
-
-	if req.IdentityToken == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Identity token is required"})
-	}
-
-	user, accessToken, refreshToken, err := h.service.AppleSignIn(req.IdentityToken)
-	if err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to sign in with Apple"})
-	}
-
-	return c.JSON(fiber.Map{
-		"error":         false,
-		"message":       "Apple sign in successful",
-		"access_token":  accessToken,
-		"refresh_token": refreshToken,
-		"user":          user,
-	})
-}
-
-// Logout handles user logout
 func (h *AuthHandler) Logout(c *fiber.Ctx) error {
 	var req dto.LogoutRequest
 	if err := c.BodyParser(&req); err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid request body"})
+		return c.Status(fiber.StatusBadRequest).JSON(dto.ErrorResponse{
+			Error:   true,
+			Message: "Invalid request body",
+		})
 	}
 
-	if req.RefreshToken == "" {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Refresh token is required"})
+	if err := h.authService.Logout(&req); err != nil {
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.ErrorResponse{
+			Error:   true,
+			Message: "Failed to logout",
+		})
 	}
 
-	if err := h.service.Logout(req.RefreshToken); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to logout"})
-	}
-
-	return c.JSON(fiber.Map{
-		"error":   false,
-		"message": "Logout successful",
-	})
+	return c.JSON(fiber.Map{"message": "Logged out successfully"})
 }
 
-// DeleteAccount handles account deletion (Guideline 5.1.1)
+// DeleteAccount implements Apple Guideline 5.1.1(v) — account deletion with full data scrub.
 func (h *AuthHandler) DeleteAccount(c *fiber.Ctx) error {
-	token, ok := c.Locals("user").(*jwt.Token)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Invalid token"})
-	}
-	claims, ok := token.Claims.(jwt.MapClaims)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Invalid claims"})
-	}
-	sub, ok := claims["sub"].(string)
-	if !ok {
-		return c.Status(fiber.StatusUnauthorized).JSON(fiber.Map{"error": true, "message": "Missing user ID"})
-	}
-	userID, err := uuid.Parse(sub)
+	userID, err := extractUserID(c)
 	if err != nil {
-		return c.Status(fiber.StatusBadRequest).JSON(fiber.Map{"error": true, "message": "Invalid user ID"})
+		return c.Status(fiber.StatusUnauthorized).JSON(dto.ErrorResponse{
+			Error: true, Message: "Unauthorized",
+		})
 	}
 
-	if err := h.service.DeleteAccount(userID); err != nil {
-		return c.Status(fiber.StatusInternalServerError).JSON(fiber.Map{"error": true, "message": "Failed to delete account"})
+	var req dto.DeleteAccountRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(dto.ErrorResponse{
+			Error: true, Message: "Invalid request body",
+		})
 	}
 
-	return c.JSON(fiber.Map{
-		"error":   false,
-		"message": "Account deleted successfully",
-	})
+	if err := h.authService.DeleteAccount(userID, req.Password); err != nil {
+		if errors.Is(err, services.ErrInvalidCredentials) {
+			return c.Status(fiber.StatusUnauthorized).JSON(dto.ErrorResponse{
+				Error: true, Message: "Incorrect password",
+			})
+		}
+		if errors.Is(err, services.ErrUserNotFound) {
+			return c.Status(fiber.StatusNotFound).JSON(dto.ErrorResponse{
+				Error: true, Message: "User not found",
+			})
+		}
+		return c.Status(fiber.StatusInternalServerError).JSON(dto.ErrorResponse{
+			Error: true, Message: "Failed to delete account",
+		})
+	}
+
+	return c.JSON(fiber.Map{"message": "Account deleted successfully"})
+}
+
+// AppleSignIn handles Sign in with Apple (Guideline 4.8).
+func (h *AuthHandler) AppleSignIn(c *fiber.Ctx) error {
+	var req dto.AppleSignInRequest
+	if err := c.BodyParser(&req); err != nil {
+		return c.Status(fiber.StatusBadRequest).JSON(dto.ErrorResponse{
+			Error: true, Message: "Invalid request body",
+		})
+	}
+
+	resp, err := h.authService.AppleSignIn(&req)
+	if err != nil {
+		return c.Status(fiber.StatusUnauthorized).JSON(dto.ErrorResponse{
+			Error: true, Message: err.Error(),
+		})
+	}
+
+	return c.JSON(resp)
 }

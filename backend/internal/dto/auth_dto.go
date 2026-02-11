@@ -1,37 +1,46 @@
 package dto
 
-// ErrorResponse is the standard error response format
-type ErrorResponse struct {
-	Error   bool   `json:"error"`
-	Message string `json:"message"`
-}
+import "github.com/google/uuid"
 
-// RegisterRequest represents the request body for user registration
 type RegisterRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
-// LoginRequest represents the request body for user login
 type LoginRequest struct {
 	Email    string `json:"email"`
 	Password string `json:"password"`
 }
 
-// RefreshTokenRequest represents the request body for refreshing a token
-type RefreshTokenRequest struct {
+type RefreshRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// LogoutRequest represents the request body for logout
 type LogoutRequest struct {
 	RefreshToken string `json:"refresh_token"`
 }
 
-// AppleSignInRequest represents the request body for Sign in with Apple
+// AppleSignInRequest accepts both snake_case and legacy camelCase payloads.
 type AppleSignInRequest struct {
-	IdentityToken     string `json:"identity_token"`
-	AuthorizationCode string `json:"authorization_code"`
-	FullName          string `json:"full_name"`
-	Email             string `json:"email"`
+	IdentityToken       string `json:"identity_token"`
+	IdentityTokenLegacy string `json:"identityToken,omitempty"`
+	AuthCode            string `json:"authorization_code,omitempty"`
+	FullName            string `json:"full_name,omitempty"`
+	Email               string `json:"email,omitempty"`
+}
+
+type AuthResponse struct {
+	AccessToken  string       `json:"access_token"`
+	RefreshToken string       `json:"refresh_token"`
+	User         UserResponse `json:"user"`
+}
+
+type UserResponse struct {
+	ID    uuid.UUID `json:"id"`
+	Email string    `json:"email"`
+}
+
+type ErrorResponse struct {
+	Error   bool   `json:"error"`
+	Message string `json:"message"`
 }
