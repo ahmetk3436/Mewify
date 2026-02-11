@@ -143,14 +143,14 @@ func (s *faceAnalysisService) GetAnalysisStats(userID uuid.UUID) (*dto.AnalysisS
 	// Get average scores
 	row := s.db.Model(&models.FaceAnalysis{}).
 		Select(`
-			AVG(overall_score) as avg_overall,
-			AVG(symmetry_score) as avg_symmetry,
-			AVG(jawline_score) as avg_jawline,
-			AVG(skin_score) as avg_skin,
-			AVG(eye_score) as avg_eye,
-			AVG(nose_score) as avg_nose,
-			AVG(lips_score) as avg_lips,
-			AVG(harmony_score) as avg_harmony,
+			COALESCE(AVG(overall_score), 0) as avg_overall,
+			COALESCE(AVG(symmetry_score), 0) as avg_symmetry,
+			COALESCE(AVG(jawline_score), 0) as avg_jawline,
+			COALESCE(AVG(skin_score), 0) as avg_skin,
+			COALESCE(AVG(eye_score), 0) as avg_eye,
+			COALESCE(AVG(nose_score), 0) as avg_nose,
+			COALESCE(AVG(lips_score), 0) as avg_lips,
+			COALESCE(AVG(harmony_score), 0) as avg_harmony,
 			COUNT(*) as total
 		`).
 		Where("user_id = ?", userID).
