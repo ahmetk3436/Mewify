@@ -46,34 +46,33 @@ export default function ProtectedLayout() {
       <Slot />
       {!hideTabBar && (
         <View
-          className="flex-row border-t border-gray-800 bg-gray-950"
-          style={{ paddingBottom: insets.bottom || 20 }}
+          className="px-4"
+          style={{ paddingBottom: (insets.bottom || 12) + 8 }}
         >
-          {TABS.map((tab) => {
-            const active = isTabActive(tab.name);
-            return (
-              <Pressable
-                key={tab.name}
-                className="flex-1 items-center py-2"
-                onPress={() => {
-                  hapticSelection();
-                  router.push(tab.path as any);
-                }}
-              >
-                <Ionicons
-                  name={(active ? tab.icon : tab.iconOutline) as any}
-                  size={24}
-                  color={active ? '#3b82f6' : '#6b7280'}
-                />
-                <Text
-                  className="mt-1 text-xs"
-                  style={{ color: active ? '#3b82f6' : '#6b7280' }}
+          <View className="flex-row rounded-2xl border border-white/10 bg-[#081229]/95 px-2 py-2">
+            {TABS.map((tab) => {
+              const active = isTabActive(tab.name);
+              return (
+                <Pressable
+                  key={tab.name}
+                  className={`flex-1 items-center rounded-xl py-2 ${active ? 'bg-blue-500/15' : ''}`}
+                  onPress={() => {
+                    hapticSelection();
+                    router.push(tab.path as any);
+                  }}
                 >
-                  {tab.label}
-                </Text>
-              </Pressable>
-            );
-          })}
+                  <Ionicons
+                    name={(active ? tab.icon : tab.iconOutline) as any}
+                    size={22}
+                    color={active ? '#60a5fa' : '#64748b'}
+                  />
+                  <Text className={`mt-1 text-xs ${active ? 'text-blue-300' : 'text-slate-500'}`}>
+                    {tab.label}
+                  </Text>
+                </Pressable>
+              );
+            })}
+          </View>
         </View>
       )}
     </View>

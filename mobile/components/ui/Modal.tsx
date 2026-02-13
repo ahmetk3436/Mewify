@@ -34,11 +34,11 @@ export default function Modal({
         onPress={onClose}
       >
         <Pressable
-          className="mx-6 w-full max-w-sm rounded-2xl bg-white p-6 shadow-xl"
+          className="mx-6 w-full max-w-sm rounded-2xl border border-white/15 bg-[#0c1832] p-6 shadow-xl"
           onPress={() => {}}
         >
           {title && (
-            <Text className="mb-4 text-xl font-bold text-gray-900">
+            <Text className="mb-4 text-xl font-bold text-white">
               {title}
             </Text>
           )}

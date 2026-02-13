@@ -1,4 +1,4 @@
-export type CategoryType = 'All' | 'Jawline' | 'Skin' | 'Style' | 'Fitness' | 'Grooming';
+export type CategoryType = 'All' | 'Jawline' | 'Skin' | 'Style' | 'Fitness' | 'Grooming' | 'Skincare' | 'Nutrition' | 'Lifestyle';
 export type DifficultyType = 'easy' | 'medium' | 'hard';
 
 export interface Recommendation {

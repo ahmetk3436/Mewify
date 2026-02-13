@@ -1,7 +1,9 @@
-import React, { useState, useMemo } from 'react';
-import { View, Text, KeyboardAvoidingView, Platform, Pressable } from 'react-native';
+import React, { useMemo, useState } from 'react';
+import { KeyboardAvoidingView, Platform, Pressable, Text, View } from 'react-native';
 import { Link, useRouter } from 'expo-router';
 import { SafeAreaView } from 'react-native-safe-area-context';
+import { LinearGradient } from 'expo-linear-gradient';
+import { Ionicons } from '@expo/vector-icons';
 import { useAuth } from '../../contexts/AuthContext';
 import Button from '../../components/ui/Button';
 import Input from '../../components/ui/Input';
@@ -66,105 +68,114 @@ export default function RegisterScreen() {
   };
 
   return (
-    <SafeAreaView className="flex-1 bg-gray-950">
-      <KeyboardAvoidingView
-        className="flex-1"
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      >
-        <View className="flex-1 justify-center px-8">
-          <Text className="mb-2 text-3xl font-bold text-white">
-            Create account
-          </Text>
-          <Text className="mb-8 text-base text-gray-400">
-            Start your glow-up journey
-          </Text>
-
-          {error ? (
-            <View className="mb-4 rounded-xl bg-red-900/30 border border-red-800 p-3">
-              <Text className="text-sm text-red-400">{error}</Text>
+    <SafeAreaView className="flex-1 bg-[#040916]">
+      <LinearGradient colors={['#040916', '#0a1630', '#121a3f']} style={{ flex: 1 }}>
+        <KeyboardAvoidingView
+          className="flex-1"
+          behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        >
+          <View className="flex-1 justify-center px-8">
+            <View className="mb-8 items-center">
+              <LinearGradient
+                colors={['#2563eb', '#4f46e5']}
+                className="mb-4 h-20 w-20 items-center justify-center rounded-3xl"
+              >
+                <Ionicons name="sparkles" size={38} color="#ffffff" />
+              </LinearGradient>
+              <Text className="text-3xl font-bold text-white">Create account</Text>
+              <Text className="mt-1 text-base text-gray-400">Start your glow-up journey</Text>
             </View>
-          ) : null}
 
-          <View className="mb-4">
-            <Input
-              label="Email"
-              placeholder="you@example.com"
-              value={email}
-              onChangeText={setEmail}
-              autoCapitalize="none"
-              keyboardType="email-address"
-              textContentType="emailAddress"
-            />
-          </View>
-
-          <View className="mb-2">
-            <Input
-              label="Password"
-              placeholder="Min. 8 characters"
-              value={password}
-              onChangeText={setPassword}
-              secureTextEntry
-              textContentType="newPassword"
-            />
-          </View>
-
-          {/* Password Strength Indicator */}
-          {passwordStrength && (
-            <View className="mb-4 flex-row items-center">
-              <View className="flex-1 h-1 rounded-full bg-gray-700 overflow-hidden">
-                <View
-                  className={`h-full rounded-full ${passwordStrength.color}`}
-                  style={{
-                    width: passwordStrength.label === 'Weak' ? '33%' :
-                           passwordStrength.label === 'Medium' ? '66%' : '100%',
-                  }}
-                />
+            {error ? (
+              <View className="mb-4 rounded-xl border border-red-500/40 bg-red-500/10 p-3">
+                <Text className="text-sm text-red-300">{error}</Text>
               </View>
-              <Text className={`ml-3 text-xs ${passwordStrength.textColor}`}>
-                {passwordStrength.label}
-              </Text>
+            ) : null}
+
+            <View className="mb-4">
+              <Input
+                label="Email"
+                placeholder="you@example.com"
+                value={email}
+                onChangeText={setEmail}
+                autoCapitalize="none"
+                keyboardType="email-address"
+                textContentType="emailAddress"
+                dark
+              />
             </View>
-          )}
 
-          <View className="mb-6">
-            <Input
-              label="Confirm Password"
-              placeholder="Repeat your password"
-              value={confirmPassword}
-              onChangeText={setConfirmPassword}
-              secureTextEntry
-              textContentType="newPassword"
+            <View className="mb-2">
+              <Input
+                label="Password"
+                placeholder="Min. 8 characters"
+                value={password}
+                onChangeText={setPassword}
+                secureTextEntry
+                textContentType="newPassword"
+                dark
+              />
+            </View>
+
+            {passwordStrength && (
+              <View className="mb-4 flex-row items-center">
+                <View className="h-1 flex-1 overflow-hidden rounded-full bg-slate-700">
+                  <View
+                    className={`h-full rounded-full ${passwordStrength.color}`}
+                    style={{
+                      width:
+                        passwordStrength.label === 'Weak'
+                          ? '33%'
+                          : passwordStrength.label === 'Medium'
+                            ? '66%'
+                            : '100%',
+                    }}
+                  />
+                </View>
+                <Text className={`ml-3 text-xs ${passwordStrength.textColor}`}>
+                  {passwordStrength.label}
+                </Text>
+              </View>
+            )}
+
+            <View className="mb-6">
+              <Input
+                label="Confirm Password"
+                placeholder="Repeat your password"
+                value={confirmPassword}
+                onChangeText={setConfirmPassword}
+                secureTextEntry
+                textContentType="newPassword"
+                dark
+              />
+            </View>
+
+            <Button
+              title="Create Account"
+              onPress={handleRegister}
+              isLoading={isLoading}
+              size="lg"
             />
+
+            <View className="mt-6 flex-row items-center justify-center">
+              <Text className="text-gray-400">Already have an account? </Text>
+              <Link href="/(auth)/login" asChild>
+                <Pressable onPress={() => hapticSelection()}>
+                  <Text className="font-semibold text-blue-300">Sign In</Text>
+                </Pressable>
+              </Link>
+            </View>
+
+            <Pressable
+              className="mt-6 items-center rounded-xl border border-blue-400/25 bg-blue-500/10 py-3"
+              onPress={handleGuestMode}
+            >
+              <Text className="text-base font-medium text-blue-200">Try Guest Mode</Text>
+              <Text className="mt-1 text-xs text-blue-300/80">3 free scans, no account needed</Text>
+            </Pressable>
           </View>
-
-          <Button
-            title="Create Account"
-            onPress={handleRegister}
-            isLoading={isLoading}
-            size="lg"
-          />
-
-          <View className="mt-6 flex-row items-center justify-center">
-            <Text className="text-gray-400">Already have an account? </Text>
-            <Link href="/(auth)/login" asChild>
-              <Pressable onPress={() => hapticSelection()}>
-                <Text className="font-semibold text-blue-400">Sign In</Text>
-              </Pressable>
-            </Link>
-          </View>
-
-          {/* Guest Mode */}
-          <Pressable
-            className="mt-6 items-center py-3"
-            onPress={handleGuestMode}
-          >
-            <Text className="text-base font-medium text-gray-500">
-              Skip for now
-            </Text>
-            <Text className="mt-1 text-xs text-gray-600">Try 3 free scans</Text>
-          </Pressable>
-        </View>
-      </KeyboardAvoidingView>
+        </KeyboardAvoidingView>
+      </LinearGradient>
     </SafeAreaView>
   );
 }

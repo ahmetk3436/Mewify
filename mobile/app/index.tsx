@@ -1,43 +1,69 @@
-import React, { useState, useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, ActivityIndicator } from 'react-native';
 import { Redirect } from 'expo-router';
-import * as SecureStore from 'expo-secure-store';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAuth } from '../contexts/AuthContext';
 
-export default function Index() {
-  const { isAuthenticated, isLoading, isGuest } = useAuth();
-  const [onboardingComplete, setOnboardingComplete] = useState<boolean | null>(null);
+const ONBOARDING_KEY = '@mewify_onboarding_complete_v3';
 
+export default function Index() {
+  const { isAuthenticated, isLoading, isGuest, continueAsGuest } = useAuth();
+  const [startingGuest, setStartingGuest] = useState(false);
+  const [hasSeenOnboarding, setHasSeenOnboarding] = useState<boolean | null>(null);
+  const [checkingOnboarding, setCheckingOnboarding] = useState(true);
+
+  // Check onboarding status
   useEffect(() => {
     const checkOnboarding = async () => {
       try {
-        const value = await SecureStore.getItemAsync('onboarding_complete');
-        setOnboardingComplete(value === 'true');
-      } catch {
-        setOnboardingComplete(false);
+        const value = await AsyncStorage.getItem(ONBOARDING_KEY);
+        console.log('Onboarding value:', value);
+        setHasSeenOnboarding(value === 'true');
+      } catch (e) {
+        console.log('Onboarding check error:', e);
+        setHasSeenOnboarding(false);
+      } finally {
+        setCheckingOnboarding(false);
       }
     };
     checkOnboarding();
   }, []);
 
-  if (isLoading || onboardingComplete === null) {
+  // Auto-start as guest after onboarding
+  useEffect(() => {
+    const startAsGuest = async () => {
+      if (!checkingOnboarding && hasSeenOnboarding === true && !isLoading && !isAuthenticated && !isGuest) {
+        setStartingGuest(true);
+        try {
+          await continueAsGuest();
+        } catch (e) {
+          console.error('Failed to start as guest:', e);
+        }
+        setStartingGuest(false);
+      }
+    };
+    startAsGuest();
+  }, [checkingOnboarding, hasSeenOnboarding, isLoading, isAuthenticated, isGuest, continueAsGuest]);
+
+  // Loading states
+  if (isLoading || checkingOnboarding || startingGuest) {
     return (
-      <View className="flex-1 items-center justify-center bg-gray-950">
-        <ActivityIndicator size="large" color="#3b82f6" />
+      <View className="flex-1 items-center justify-center bg-[#000000]">
+        <ActivityIndicator size="large" color="#8B5CF6" />
       </View>
     );
   }
 
-  // Show onboarding if not completed
-  if (!onboardingComplete) {
-    return <Redirect href="/(onboarding)/welcome" />;
+  // First-time users → Onboarding
+  if (hasSeenOnboarding === false) {
+    return <Redirect href="/(onboarding)/welcome-new" />;
   }
 
-  // Authenticated or guest -> protected area
-  if (isAuthenticated || isGuest) {
+  // Returning users → Home
+  if (hasSeenOnboarding === true && (isAuthenticated || isGuest)) {
     return <Redirect href="/(protected)/(tabs)" />;
   }
 
-  // Not authenticated -> login
-  return <Redirect href="/(auth)/login" />;
+  // Default: show onboarding
+  return <Redirect href="/(onboarding)/welcome-new" />;
 }

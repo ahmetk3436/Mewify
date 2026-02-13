@@ -64,7 +64,7 @@ export default function ReportButton({
         onClose={() => setShowModal(false)}
         title="Report Content"
       >
-        <Text className="mb-4 text-sm text-gray-600">
+        <Text className="mb-4 text-sm text-slate-300">
           Tell us why you are reporting this {contentType}. Our team reviews all
           reports within 24 hours.
         </Text>
@@ -76,6 +76,7 @@ export default function ReportButton({
             onChangeText={setReason}
             multiline
             numberOfLines={3}
+            dark
           />
         </View>
         <View className="flex-row gap-3">
